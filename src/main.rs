@@ -1,63 +1,61 @@
-#[macro_use]
-extern crate rustacuda;
+use rust_gpu_tools::{cuda, opencl, program_closures, Device, GPUError, Program, Vendor};
 
-use rustacuda::prelude::*;
-use std::error::Error;
-use std::ffi::CString;
+/// Returns a `Program` that runs on CUDA.
+fn cuda(device: &Device) -> Program {
+    // The kernel was compiled with:
+    let cuda_kernel = include_bytes!("../target/gol.fatbin");
+    let cuda_device = device.cuda_device().unwrap();
+    let cuda_program = cuda::Program::from_bytes(cuda_device, cuda_kernel).unwrap();
+    Program::Cuda(cuda_program)
+}
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // Set up the context, load the module, and create a stream to run kernels in.
-    rustacuda::init(CudaFlags::empty())?;
-    let device = Device::get_device(0)?;
-    let _ctx = Context::create_and_push(ContextFlags::MAP_HOST | ContextFlags::SCHED_AUTO, device)?;
+pub fn main() {
+    // Define some data that should be operated on.
+    let aa: Vec<u32> = vec![1, 2, 3, 4];
+    let bb: Vec<u32> = vec![5, 6, 7, 8];
 
-    let ptx = CString::new(include_str!("../target/gol.ptx"))?;
-    let module = Module::load_from_string(&ptx)?;
-    let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
+    // This is the core. Here we write the interaction with the GPU independent of whether it is
+    // CUDA or OpenCL.
+    let closures = program_closures!(|program, _args| -> Result<Vec<u32>, GPUError> {
+        // Make sure the input data has the same length.
+        assert_eq!(aa.len(), bb.len());
+        let length = aa.len();
 
-    // Create buffers for data
-    let mut in_x = DeviceBuffer::from_slice(&[1.0f32; 10])?;
-    let mut in_y = DeviceBuffer::from_slice(&[2.0f32; 10])?;
-    let mut out_1 = DeviceBuffer::from_slice(&[0.0f32; 10])?;
-    let mut out_2 = DeviceBuffer::from_slice(&[0.0f32; 10])?;
+        // Copy the data to the GPU.
+        let aa_buffer = program.create_buffer_from_slice(&aa)?;
+        let bb_buffer = program.create_buffer_from_slice(&bb)?;
 
-    // This kernel adds each element in `in_x` and `in_y` and writes the result into `out`.
-    unsafe {
-        // Launch the kernel with one block of one thread, no dynamic shared memory on `stream`.
-        let result = launch!(module.sum<<<1, 1, 0, stream>>>(
-            in_x.as_device_ptr(),
-            in_y.as_device_ptr(),
-            out_1.as_device_ptr(),
-            out_1.len()
-        ));
-        result?;
+        // The result buffer has the same length as the input buffers.
+        let result_buffer = unsafe { program.create_buffer::<u32>(length)? };
 
-        // Launch the kernel again using the `function` form:
-        let function_name = CString::new("sum")?;
-        let sum = module.get_function(&function_name)?;
-        // Launch with 1x1x1 (1) blocks of 10x1x1 (10) threads, to show that you can use tuples to
-        // configure grid and block size.
-        let result = launch!(sum<<<(1, 1, 1), (10, 1, 1), 0, stream>>>(
-            in_x.as_device_ptr(),
-            in_y.as_device_ptr(),
-            out_2.as_device_ptr(),
-            out_2.len()
-        ));
-        result?;
+        // Get the kernel.
+        let kernel = program.create_kernel("add", 1, 1)?;
+
+        // Execute the kernel.
+        kernel
+            .arg(&(length as u32))
+            .arg(&aa_buffer)
+            .arg(&bb_buffer)
+            .arg(&result_buffer)
+            .run()?;
+
+        // Get the resulting data.
+        let mut result = vec![0u32; length];
+        program.read_into_buffer(&result_buffer, &mut result)?;
+
+        Ok(result)
+    });
+
+    // First we run it on CUDA if available
+    let nv_dev_list = Device::all()
+        .into_iter()
+        .filter(|d| d.vendor() == Vendor::Nvidia)
+        .collect::<Vec<_>>();
+    if !nv_dev_list.is_empty() {
+        // Test NVIDIA CUDA Flow
+        let cuda_program = cuda(nv_dev_list[0]);
+        let cuda_result = cuda_program.run(closures, ()).unwrap();
+        assert_eq!(cuda_result, [6, 8, 10, 12]);
+        println!("CUDA result: {:?}", cuda_result);
     }
-
-    // Kernel launches are asynchronous, so we wait for the kernels to finish executing.
-    stream.synchronize()?;
-
-    // Copy the results back to host memory
-    let mut out_host = [0.0f32; 20];
-    out_1.copy_to(&mut out_host[0..10])?;
-    out_2.copy_to(&mut out_host[10..20])?;
-
-    for x in out_host.iter() {
-        assert_eq!(3.0 as u32, *x as u32);
-    }
-
-    println!("Launched kernel successfully.");
-    Ok(())
 }
