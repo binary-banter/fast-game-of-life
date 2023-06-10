@@ -1,21 +1,15 @@
-use rust_gpu_tools::{cuda, opencl, program_closures, Device, GPUError, Program, Vendor};
+mod game;
 
-/// Returns a `Program` that runs on CUDA.
-fn cuda(device: &Device) -> Program {
-    // The kernel was compiled with:
-    let cuda_kernel = include_bytes!("../target/gol.fatbin");
-    let cuda_device = device.cuda_device().unwrap();
-    let cuda_program = cuda::Program::from_bytes(cuda_device, cuda_kernel).unwrap();
-    Program::Cuda(cuda_program)
-}
+use rust_gpu_tools::{opencl, program_closures, Device, GPUError, Program};
+
+#[cfg(feature = "cuda")]
+use rust_gpu_tools::cuda;
 
 pub fn main() {
     // Define some data that should be operated on.
     let aa: Vec<u32> = vec![1, 2, 3, 4];
     let bb: Vec<u32> = vec![5, 6, 7, 8];
 
-    // This is the core. Here we write the interaction with the GPU independent of whether it is
-    // CUDA or OpenCL.
     let closures = program_closures!(|program, _args| -> Result<Vec<u32>, GPUError> {
         // Make sure the input data has the same length.
         assert_eq!(aa.len(), bb.len());
@@ -46,16 +40,26 @@ pub fn main() {
         Ok(result)
     });
 
-    // First we run it on CUDA if available
-    let nv_dev_list = Device::all()
-        .into_iter()
-        .filter(|d| d.vendor() == Vendor::Nvidia)
-        .collect::<Vec<_>>();
-    if !nv_dev_list.is_empty() {
-        // Test NVIDIA CUDA Flow
-        let cuda_program = cuda(nv_dev_list[0]);
-        let cuda_result = cuda_program.run(closures, ()).unwrap();
-        assert_eq!(cuda_result, [6, 8, 10, 12]);
-        println!("CUDA result: {:?}", cuda_result);
-    }
+    let device = Device::all()[0];
+    let program = get_program(device);
+    let result = program.run(closures, ()).unwrap();
+    assert_eq!(result, [6, 8, 10, 12]);
+    println!("Result: {:?}", result);
+}
+
+#[cfg(feature = "cuda")]
+fn get_program(device: &Device) -> Program {
+    // The kernel was compiled with:
+    let cuda_kernel = CString::new("../target/gol.fatbin").unwrap();
+    let cuda_device = device.cuda_device().unwrap();
+    let cuda_program = cuda::Program::from_binary(cuda_device, &cuda_kernel).unwrap();
+    Program::Cuda(cuda_program)
+}
+
+#[cfg(not(feature = "cuda"))]
+fn get_program(device: &Device) -> Program {
+    let opencl_kernel = include_str!("./kernels/gol.cl");
+    let opencl_device = device.opencl_device().unwrap();
+    let opencl_program = opencl::Program::from_opencl(opencl_device, opencl_kernel).unwrap();
+    Program::Opencl(opencl_program)
 }
