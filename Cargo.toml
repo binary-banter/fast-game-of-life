@@ -5,13 +5,13 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
-rust-gpu-tools = {path="rust-gpu-tools", default-features = false, features = ["opencl"] }
+opencl3 = "0.9.3"
 
 [dev-dependencies]
 criterion = "0.5.1"
 
 [features]
-cuda = ["rust-gpu-tools/cuda"]
+cuda = []
 
 [profile.release]
 opt-level = 3
