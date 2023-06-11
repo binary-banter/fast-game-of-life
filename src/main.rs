@@ -14,6 +14,7 @@ mod cuda;
 use crate::cuda::driver::check_error;
 #[cfg(feature = "cuda")]
 use cuda as game;
+use crate::cuda::driver::stream::Stream;
 
 #[link(name = "kernel", kind = "static")]
 extern "C" {
@@ -25,17 +26,8 @@ pub fn main() {
 
     let block_dim = dim3 { x: 1, y: 1, z: 1 };
 
-    let mut stream: cudaStream_t = ptr::null_mut();
-    unsafe {
-        check_error(cudaStreamCreate(&mut stream as *mut cudaStream_t)).unwrap();
-        check_error(cudaLaunchKernel(
-            step as *const c_void,
-            grid_dim,
-            block_dim,
-            ptr::null_mut(),
-            0,
-            stream,
-        ))
+    let mut stream = Stream::new().unwrap();
+    stream
+        .launch(step as *const c_void, grid_dim, block_dim, ptr::null_mut(), 0)
         .unwrap();
-    }
 }
