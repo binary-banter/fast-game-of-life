@@ -1,6 +1,7 @@
 use std::env;
 use std::process::Command;
 
+#[cfg(feature = "cuda")]
 fn main() {
     println!("cargo:rerun-if-changed=src/kernels/gol.cu");
 
@@ -23,3 +24,6 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", &out_dir);
 }
+
+#[cfg(not(feature = "cuda"))]
+fn main() {}

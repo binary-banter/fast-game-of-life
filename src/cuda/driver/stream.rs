@@ -2,7 +2,8 @@ use crate::cuda::driver::args::Args;
 use crate::cuda::driver::check_error;
 use crate::cuda::driver::kernel::Kernel;
 use cuda_runtime_sys::{
-    cudaError, cudaLaunchKernel, cudaStreamCreate, cudaStreamDestroy, cudaStream_t, dim3,
+    cudaError, cudaLaunchKernel, cudaStreamCreate, cudaStreamDestroy, cudaStreamSynchronize,
+    cudaStream_t, dim3,
 };
 use std::ptr;
 
@@ -35,6 +36,10 @@ impl Stream {
                 self.pointer,
             ))
         }
+    }
+
+    pub fn wait(&self) -> Result<(), cudaError> {
+        unsafe { check_error(cudaStreamSynchronize(self.pointer)) }
     }
 }
 

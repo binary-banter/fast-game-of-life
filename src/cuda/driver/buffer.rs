@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+use std::mem::size_of;
 use crate::cuda::driver::args::ToArg;
 use crate::cuda::driver::check_error;
 use cuda_runtime_sys::{cudaError, cudaFree, cudaMalloc, cudaMemcpy, cudaMemcpyKind, cudaMemset};
@@ -5,31 +7,32 @@ use std::os::raw::c_int;
 use std::os::raw::c_void;
 use std::ptr;
 
-pub struct Buffer {
+pub struct Buffer<T> {
     pointer: *mut c_void,
-    bytes: usize,
+    length: usize,
+    phantom: PhantomData<T>,
 }
 
-impl Buffer {
-    pub fn new(bytes: usize) -> Result<Self, cudaError> {
+impl<T> Buffer<T> {
+    pub fn new(length: usize) -> Result<Self, cudaError> {
         let mut pointer: *mut c_void = ptr::null_mut();
         unsafe {
-            check_error(cudaMalloc(&mut pointer as *mut _, bytes))?;
+            check_error(cudaMalloc(&mut pointer as *mut _, length * size_of::<T>()))?;
         }
 
-        Ok(Self { pointer, bytes })
+        Ok(Self { pointer, length, phantom: PhantomData::default() })
     }
 
     /// reads bytes length of bytes from buffer using an offset
     /// panics if it offset + bytes length overflows the buffer size
-    pub fn read(&self, offset: usize, bytes: &mut [u8]) -> Result<(), cudaError> {
-        assert!(offset + bytes.len() <= self.bytes);
+    pub fn read(&self, offset: usize, data: &mut [T]) -> Result<(), cudaError> {
+        assert!(offset + data.len() <= self.length);
 
         unsafe {
             check_error(cudaMemcpy(
-                bytes.as_mut_ptr() as *mut c_void,
-                self.pointer.offset(offset as isize),
-                bytes.len(),
+                data.as_mut_ptr() as *mut c_void,
+                self.pointer.offset((offset * size_of::<T>()) as isize),
+                data.len() * size_of::<T>(),
                 cudaMemcpyKind::cudaMemcpyDeviceToHost,
             ))?;
         }
@@ -37,22 +40,22 @@ impl Buffer {
         Ok(())
     }
 
-    pub fn read_all(&self) -> Result<Vec<u8>, cudaError> {
-        let mut vec = vec![0; self.bytes];
+    pub fn read_all(&self) -> Result<Vec<T>, cudaError> where T : Default + Clone {
+        let mut vec = vec![T::default(); self.length];
         self.read(0, &mut vec)?;
         Ok(vec)
     }
 
     /// writes bytes length of bytes to buffer using an offset
     /// panics if it offset + bytes length overflows the buffer size
-    pub fn write(&mut self, offset: usize, bytes: &[u8]) -> Result<(), cudaError> {
-        assert!(offset + bytes.len() <= self.bytes);
+    pub fn write(&mut self, offset: usize, bytes: &[T]) -> Result<(), cudaError> {
+        assert!(offset + bytes.len() <= self.length);
 
         unsafe {
             check_error(cudaMemcpy(
-                self.pointer.offset(offset as isize),
+                self.pointer.offset((offset * size_of::<T>()) as isize),
                 bytes.as_ptr() as *const c_void,
-                bytes.len(),
+                bytes.len() * size_of::<T>(),
                 cudaMemcpyKind::cudaMemcpyHostToDevice,
             ))?;
         }
@@ -60,31 +63,18 @@ impl Buffer {
         Ok(())
     }
 
-    pub fn write_multiple(
-        &mut self,
-        offset: usize,
-        count: usize,
-        value: u8,
-    ) -> Result<(), cudaError> {
-        assert!(offset + count <= self.bytes);
-
+    pub fn zero(&mut self) -> Result<(), cudaError> {
         unsafe {
             check_error(cudaMemset(
-                self.pointer.offset(offset as isize),
-                value as c_int,
-                count,
-            ))?;
+                self.pointer,
+                0,
+                self.length * size_of::<T>(),
+            ))
         }
-
-        Ok(())
-    }
-
-    pub fn write_all(&mut self, value: u8) -> Result<(), cudaError> {
-        self.write_multiple(0, self.bytes, value)
     }
 }
 
-impl Drop for Buffer {
+impl<T> Drop for Buffer<T> {
     fn drop(&mut self) {
         unsafe {
             check_error(cudaFree(self.pointer)).unwrap();
@@ -92,7 +82,7 @@ impl Drop for Buffer {
     }
 }
 
-impl ToArg for &mut Buffer {
+impl<T> ToArg for &mut Buffer<T> {
     fn to_arg(self) -> *mut c_void {
         (&mut self.pointer) as *mut *mut c_void as *mut c_void
     }
@@ -104,11 +94,20 @@ mod tests {
     use std::slice;
 
     #[test]
-    fn write_read() {
-        let mut buffer = Buffer::new(1).unwrap();
-        buffer.write(0, &[0b0110_1001]).unwrap();
-        let mut b: u8 = 0;
+    fn write_read_u8() {
+        let mut buffer = Buffer::<u8>::new(1).unwrap();
+        buffer.write(0, &[0x12]).unwrap();
+        let mut b = 0;
         buffer.read(0, slice::from_mut(&mut b)).unwrap();
-        assert_eq!(b, 0b0110_1001);
+        assert_eq!(b, 0x12);
+    }
+
+    #[test]
+    fn write_read_u32() {
+        let mut buffer = Buffer::<u32>::new(1).unwrap();
+        buffer.write(0, &[0x1111_2222]).unwrap();
+        let mut b = 0;
+        buffer.read(0, slice::from_mut(&mut b)).unwrap();
+        assert_eq!(b, 0x1111_2222);
     }
 }
