@@ -7,7 +7,7 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
 
     let status = Command::new("nvcc")
-        .args(&[
+        .args([
             "-O3",
             "-lib",
             "-gencode=arch=compute_61,code=sm_61",

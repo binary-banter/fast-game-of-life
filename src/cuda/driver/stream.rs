@@ -1,9 +1,9 @@
+use crate::cuda::driver::args::Args;
 use crate::cuda::driver::check_error;
 use crate::cuda::driver::kernel::Kernel;
 use cuda_runtime_sys::{
     cudaError, cudaLaunchKernel, cudaStreamCreate, cudaStreamDestroy, cudaStream_t, dim3,
 };
-use std::os::raw::c_void;
 use std::ptr;
 
 pub struct Stream {
@@ -22,15 +22,15 @@ impl Stream {
         kernel: Kernel,
         grid_dim: dim3,
         block_dim: dim3,
-        args: *mut *mut c_void,
+        args: &Args,
         shared_mem: usize,
     ) -> Result<(), cudaError> {
         unsafe {
             check_error(cudaLaunchKernel(
-                kernel,
+                kernel.function(),
                 grid_dim,
                 block_dim,
-                args,
+                args.as_args(),
                 shared_mem,
                 self.pointer,
             ))

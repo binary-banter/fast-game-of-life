@@ -1,11 +1,12 @@
+use crate::cuda::driver::args::ToArg;
 use crate::cuda::driver::check_error;
 use cuda_runtime_sys::{cudaError, cudaFree, cudaMalloc, cudaMemcpy, cudaMemcpyKind, cudaMemset};
-use std::os::raw::c_void;
 use std::os::raw::c_int;
+use std::os::raw::c_void;
 use std::ptr;
 
 pub struct Buffer {
-    pub pointer: *mut c_void,
+    pointer: *mut c_void,
     bytes: usize,
 }
 
@@ -59,7 +60,12 @@ impl Buffer {
         Ok(())
     }
 
-    pub fn write_multiple(&mut self, offset: usize, count: usize, value: u8) -> Result<(), cudaError> {
+    pub fn write_multiple(
+        &mut self,
+        offset: usize,
+        count: usize,
+        value: u8,
+    ) -> Result<(), cudaError> {
         assert!(offset + count <= self.bytes);
 
         unsafe {
@@ -83,6 +89,12 @@ impl Drop for Buffer {
         unsafe {
             check_error(cudaFree(self.pointer)).unwrap();
         }
+    }
+}
+
+impl ToArg for &mut Buffer {
+    fn to_arg(self) -> *mut c_void {
+        (&mut self.pointer) as *mut *mut c_void as *mut c_void
     }
 }
 
