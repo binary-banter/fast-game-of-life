@@ -15,7 +15,7 @@ use std::{mem, ptr};
 #[derive(Debug)]
 pub struct Game {
     /// This field represents the height of the `field` including padding.
-    pub height: usize,
+    height: usize,
 
     /// This field represents the width of the `field` in u64s including padding.
     columns: usize,
@@ -41,28 +41,37 @@ const PADDING_Y: usize = 16;
 
 impl Game {
     pub fn step(&mut self, steps: u32) {
-        let global_work_size = (self.height - 2 * PADDING_Y) / (WORK_GROUP_SIZE*WORK_PER_THREAD - 2 * PADDING_Y) * WORK_GROUP_SIZE;
-        if let Some(event) = (0..steps/16).map(|_| {
-            let event = unsafe {
-                ExecuteKernel::new(&self.kernel)
-                    .set_arg(&self.field_buffer)
-                    .set_arg(&self.new_field_buffer)
-                    .set_arg(&(self.height as u32))
-                    .set_arg(&16u32)
-                    .set_global_work_sizes(&vec![global_work_size, self.columns - 2 * PADDING_X])
-                    .set_global_work_offsets(&vec![0, PADDING_X])
-                    .set_local_work_sizes(&vec![WORK_GROUP_SIZE,1])
-                    .enqueue_nd_range(&self.queue).unwrap()
-            };
-            mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
-            event
-        }).last() {
+        let global_work_size = (self.height - 2 * PADDING_Y)
+            / (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
+            * WORK_GROUP_SIZE;
+        if let Some(event) = (0..steps / 16)
+            .map(|_| {
+                let event = unsafe {
+                    ExecuteKernel::new(&self.kernel)
+                        .set_arg(&self.field_buffer)
+                        .set_arg(&self.new_field_buffer)
+                        .set_arg(&(self.height as u32))
+                        .set_arg(&16u32)
+                        .set_global_work_sizes(&vec![
+                            global_work_size,
+                            self.columns - 2 * PADDING_X,
+                        ])
+                        .set_global_work_offsets(&vec![0, PADDING_X])
+                        .set_local_work_sizes(&vec![WORK_GROUP_SIZE, 1])
+                        .enqueue_nd_range(&self.queue)
+                        .unwrap()
+                };
+                mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
+                event
+            })
+            .last()
+        {
             event.wait().unwrap();
         }
 
         let remaining_steps = steps % 16;
         if remaining_steps == 0 {
-            return
+            return;
         }
 
         unsafe {
@@ -74,8 +83,11 @@ impl Game {
                 .set_global_work_sizes(&vec![global_work_size, self.columns - 2 * PADDING_X])
                 .set_global_work_offsets(&vec![0, PADDING_X])
                 .set_local_work_sizes(&vec![WORK_GROUP_SIZE, 1])
-                .enqueue_nd_range(&self.queue).unwrap()
-        }.wait().unwrap();
+                .enqueue_nd_range(&self.queue)
+                .unwrap()
+        }
+        .wait()
+        .unwrap();
         mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
     }
 
@@ -89,7 +101,7 @@ impl Game {
         let context = Context::from_device(&device).expect("Context::from_device failed");
 
         #[allow(deprecated)]
-            let queue = CommandQueue::create_default(&context, CL_QUEUE_PROFILING_ENABLE)
+        let queue = CommandQueue::create_default(&context, CL_QUEUE_PROFILING_ENABLE)
             .expect("CommandQueue::create_default failed");
 
         let program = Program::create_and_build_from_source(
@@ -97,11 +109,16 @@ impl Game {
             include_str!("../kernels/gol.cl"),
             OPTIMIZATIONS,
         )
-            .expect("Program::create_and_build_from_source failed");
+        .expect("Program::create_and_build_from_source failed");
         let kernel = Kernel::create(&program, KERNEL_NAME).expect("Kernel::create failed");
 
         let columns = div_ceil(width, 32) + 2 * PADDING_X;
-        let height = div_ceil(div_ceil(height, WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y) * (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y), WORK_PER_THREAD) * WORK_PER_THREAD + 2 * PADDING_Y;
+        let height = div_ceil(
+            div_ceil(height, WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
+                * (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y),
+            WORK_PER_THREAD,
+        ) * WORK_PER_THREAD
+            + 2 * PADDING_Y;
 
         let mut field_buffer = unsafe {
             Buffer::create(
@@ -110,7 +127,7 @@ impl Game {
                 columns * height,
                 ptr::null_mut(),
             )
-                .unwrap()
+            .unwrap()
         };
 
         let mut new_field_buffer = unsafe {
@@ -120,7 +137,7 @@ impl Game {
                 columns * height,
                 ptr::null_mut(),
             )
-                .unwrap()
+            .unwrap()
         };
 
         unsafe {
@@ -166,9 +183,29 @@ impl Game {
         let nibble = 0x8000_0000 >> (x % 32);
         let i = (y + PADDING_Y) + column * self.height;
         let mut word: u32 = 0;
-        unsafe { self.queue.enqueue_read_buffer(&self.field_buffer, CL_BLOCKING, i * size_of::<u32>(), std::slice::from_mut(&mut word), &[]).unwrap(); }
+        unsafe {
+            self.queue
+                .enqueue_read_buffer(
+                    &self.field_buffer,
+                    CL_BLOCKING,
+                    i * size_of::<u32>(),
+                    std::slice::from_mut(&mut word),
+                    &[],
+                )
+                .unwrap();
+        }
         word |= nibble;
-        unsafe { self.queue.enqueue_write_buffer(&mut self.field_buffer, CL_BLOCKING, i * size_of::<u32>(), std::slice::from_ref(&word), &[]).unwrap(); }
+        unsafe {
+            self.queue
+                .enqueue_write_buffer(
+                    &mut self.field_buffer,
+                    CL_BLOCKING,
+                    i * size_of::<u32>(),
+                    std::slice::from_ref(&word),
+                    &[],
+                )
+                .unwrap();
+        }
     }
 
     pub fn get(&self, x: usize, y: usize) -> bool {
@@ -176,7 +213,17 @@ impl Game {
         let nibble = 0x8000_0000 >> (x % 32);
         let i = (y + PADDING_Y) + column * self.height;
         let mut word: u32 = 0;
-        unsafe { self.queue.enqueue_read_buffer(&self.field_buffer, CL_BLOCKING, i * size_of::<u32>(), std::slice::from_mut(&mut word), &[]).unwrap(); }
+        unsafe {
+            self.queue
+                .enqueue_read_buffer(
+                    &self.field_buffer,
+                    CL_BLOCKING,
+                    i * size_of::<u32>(),
+                    std::slice::from_mut(&mut word),
+                    &[],
+                )
+                .unwrap();
+        }
         word & nibble != 0
     }
 }
@@ -185,7 +232,7 @@ impl Display for Game {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut frame = String::new();
 
-        for y in 0..self.height - 2 * PADDING_Y{
+        for y in 0..self.height - 2 * PADDING_Y {
             for x in 0..(self.columns - 2 * PADDING_X) * 32 {
                 if self.get(x, y) {
                     frame.push('█');

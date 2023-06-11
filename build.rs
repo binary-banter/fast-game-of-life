@@ -1,14 +1,18 @@
 use std::process::Command;
 
-// Example custom build script.
 fn main() {
     // Tell Cargo that if the given file changes, to rerun this build script.
     println!("cargo:rerun-if-changed=src/kernels/gol.cu");
-    let _ = Command::new("nvcc")
-        .arg("-fatbin")
+    if let Ok(mut p) = Command::new("nvcc")
+        .arg("-ptx")
         .arg("-gencode=arch=compute_61,code=sm_61")
         .arg("./src/kernels/gol.cu")
         .arg("-o")
-        .arg("./target/gol.fatbin")
-        .spawn();
+        .arg("./target/gol.ptx")
+        .spawn() {
+        let exit = p.wait().unwrap();
+        if !exit.success() {
+            panic!("Failed to build kernel.");
+        }
+    }
 }

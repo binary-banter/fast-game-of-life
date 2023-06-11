@@ -13,14 +13,17 @@ use cuda as game;
 use game::Game;
 
 pub fn main() {
-    let mut game = Game::new(32, 32);
-
-    // blinker
-    game.set(1, 0);
-    game.set(1, 1);
-    game.set(1, 2);
-
-    game.step(1);
-
-    println!("{game}");
+    let mut game = Game::new(1024, 1024);
+    const STEPS: usize = 1000;
+    game.set(4, 5);
+    game.set(5, 6);
+    game.set(6, 4);
+    game.set(6, 5);
+    game.set(6, 6);
+    game.step(4 * STEPS as u32);
+    assert!(game.get(4 + STEPS, 5 + STEPS));
+    assert!(game.get(5 + STEPS, 6 + STEPS));
+    assert!(game.get(6 + STEPS, 4 + STEPS));
+    assert!(game.get(6 + STEPS, 5 + STEPS));
+    assert!(game.get(6 + STEPS, 6 + STEPS));
 }
