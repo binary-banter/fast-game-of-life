@@ -39,8 +39,8 @@ fn div_ceil(x: usize, y: usize) -> usize {
     (x + y - 1) / y
 }
 
-const WORK_GROUP_SIZE: usize = 512;
-const WORK_PER_THREAD: usize = 3;
+const WORK_GROUP_SIZE: usize = 896;
+const WORK_PER_THREAD: usize = 1;
 
 const PADDING_X: usize = 1;
 const PADDING_Y: usize = 16;
