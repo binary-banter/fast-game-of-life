@@ -1,8 +1,8 @@
-use std::marker::PhantomData;
-use std::mem::size_of;
 use crate::cuda::driver::args::ToArg;
 use crate::cuda::driver::check_error;
 use cuda_runtime_sys::{cudaError, cudaFree, cudaMalloc, cudaMemcpy, cudaMemcpyKind, cudaMemset};
+use std::marker::PhantomData;
+use std::mem::size_of;
 use std::os::raw::c_int;
 use std::os::raw::c_void;
 use std::ptr;
@@ -20,7 +20,11 @@ impl<T> Buffer<T> {
             check_error(cudaMalloc(&mut pointer as *mut _, length * size_of::<T>()))?;
         }
 
-        Ok(Self { pointer, length, phantom: PhantomData::default() })
+        Ok(Self {
+            pointer,
+            length,
+            phantom: PhantomData::default(),
+        })
     }
 
     /// reads bytes length of bytes from buffer using an offset
@@ -40,7 +44,10 @@ impl<T> Buffer<T> {
         Ok(())
     }
 
-    pub fn read_all(&self) -> Result<Vec<T>, cudaError> where T : Default + Clone {
+    pub fn read_all(&self) -> Result<Vec<T>, cudaError>
+    where
+        T: Default + Clone,
+    {
         let mut vec = vec![T::default(); self.length];
         self.read(0, &mut vec)?;
         Ok(vec)
@@ -64,13 +71,7 @@ impl<T> Buffer<T> {
     }
 
     pub fn zero(&mut self) -> Result<(), cudaError> {
-        unsafe {
-            check_error(cudaMemset(
-                self.pointer,
-                0,
-                self.length * size_of::<T>(),
-            ))
-        }
+        unsafe { check_error(cudaMemset(self.pointer, 0, self.length * size_of::<T>())) }
     }
 }
 

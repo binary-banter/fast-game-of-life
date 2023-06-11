@@ -1,15 +1,15 @@
 pub mod driver;
 
 use crate::cuda::driver::buffer::Buffer;
+use crate::cuda::driver::kernel::Kernel;
 use crate::cuda::driver::stream::Stream;
 use crate::game::driver::args::Args;
 use cuda_runtime_sys::dim3;
+use std::ffi::c_int;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
-use std::{mem, ptr};
-use std::ffi::c_int;
 use std::os::raw::{c_uint, c_void};
-use crate::cuda::driver::kernel::Kernel;
+use std::{mem, ptr};
 
 /// The `Game` struct stores the state of an instance of Conway's Game of Life.
 ///
@@ -47,14 +47,20 @@ const PADDING_Y: usize = 16;
 
 impl Game {
     pub fn step(&mut self, steps: u32) {
-        for _ in 0..steps / 16{
+        for _ in 0..steps / 16 {
             let mut args = Args::new();
             args.add_arg(&mut self.field_buffer);
             args.add_arg(&mut self.new_field_buffer);
             args.add_arg(&mut (self.height as u32));
             args.add_arg(&mut 16u32);
             self.stream
-                .launch(self.kernel, self.grid_dim, self.block_dim, &args, 2 * (WORK_GROUP_SIZE * WORK_PER_THREAD + 2) * size_of::<u32>())
+                .launch(
+                    self.kernel,
+                    self.grid_dim,
+                    self.block_dim,
+                    &args,
+                    2 * (WORK_GROUP_SIZE * WORK_PER_THREAD + 2) * size_of::<u32>(),
+                )
                 .unwrap();
             mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
         }
@@ -70,7 +76,13 @@ impl Game {
         args.add_arg(&mut (self.height as u32));
         args.add_arg(&mut (remaining_steps as u32));
         self.stream
-            .launch(self.kernel, self.grid_dim, self.block_dim, &args, 2 * (WORK_GROUP_SIZE * WORK_PER_THREAD + 2) * size_of::<u32>())
+            .launch(
+                self.kernel,
+                self.grid_dim,
+                self.block_dim,
+                &args,
+                2 * (WORK_GROUP_SIZE * WORK_PER_THREAD + 2) * size_of::<u32>(),
+            )
             .unwrap();
         mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
 
@@ -79,14 +91,28 @@ impl Game {
 
     pub fn new(width: usize, height: usize) -> Self {
         let columns = div_ceil(width, 32) + 2 * PADDING_X;
-        let height = div_ceil(div_ceil(height, WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y) * (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y), WORK_PER_THREAD, ) * WORK_PER_THREAD + 2 * PADDING_Y;
+        let height = div_ceil(
+            div_ceil(height, WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
+                * (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y),
+            WORK_PER_THREAD,
+        ) * WORK_PER_THREAD
+            + 2 * PADDING_Y;
 
         let global_work_size_x = columns - 2 * PADDING_X;
-        let global_work_size_y = (height - 2 * PADDING_Y) / (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y);
+        let global_work_size_y =
+            (height - 2 * PADDING_Y) / (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y);
         let local_work_size_y = WORK_GROUP_SIZE;
 
-        let grid_dim = dim3 { x: global_work_size_x as c_uint, y: global_work_size_y as c_uint, z: 1 };
-        let block_dim = dim3 { x: 1, y: local_work_size_y as c_uint, z: 1 };
+        let grid_dim = dim3 {
+            x: global_work_size_x as c_uint,
+            y: global_work_size_y as c_uint,
+            z: 1,
+        };
+        let block_dim = dim3 {
+            x: 1,
+            y: local_work_size_y as c_uint,
+            z: 1,
+        };
 
         let kernel = Kernel::new(step);
         let stream = Stream::new().unwrap();
@@ -113,9 +139,13 @@ impl Game {
         let nibble = 0x8000_0000 >> (x % 32);
         let i = (y + PADDING_Y) + column * self.height;
         let mut word = 0;
-        self.field_buffer.read(i, std::slice::from_mut(&mut word)).unwrap();
+        self.field_buffer
+            .read(i, std::slice::from_mut(&mut word))
+            .unwrap();
         word |= nibble;
-        self.field_buffer.write(i, std::slice::from_ref(&word)).unwrap();
+        self.field_buffer
+            .write(i, std::slice::from_ref(&word))
+            .unwrap();
     }
 
     pub fn get(&self, x: usize, y: usize) -> bool {
@@ -123,7 +153,9 @@ impl Game {
         let nibble = 0x8000_0000 >> (x % 32);
         let i = (y + PADDING_Y) + column * self.height;
         let mut word: u32 = 0;
-        self.field_buffer.read(i, std::slice::from_mut(&mut word)).unwrap();
+        self.field_buffer
+            .read(i, std::slice::from_mut(&mut word))
+            .unwrap();
         word & nibble != 0
     }
 }

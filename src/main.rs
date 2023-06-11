@@ -15,9 +15,9 @@ use crate::cuda::driver::args::Args;
 use crate::cuda::driver::buffer::Buffer;
 use crate::cuda::driver::kernel::Kernel;
 use crate::cuda::driver::stream::Stream;
+use crate::game::Game;
 #[cfg(feature = "cuda")]
 use cuda as game;
-use crate::game::Game;
 
 pub fn main() {
     let mut game = Game::new(16, 16);

@@ -13,7 +13,6 @@ criterion = "0.5.1"
 
 [features]
 cuda = []
-default = ["cuda"]
 
 [profile.release]
 opt-level = 3
