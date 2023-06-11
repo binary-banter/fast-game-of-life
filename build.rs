@@ -7,12 +7,11 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
 
     Command::new("nvcc")
-        .args(&["-O3",
-            "src/kernels/gol.cu",
+        .args(&[
+            "-O3",
             "-lib",
-            "-ccbin",
-            "cl.exe",
-            "-Xcompiler", "-wd4819",
+            "-gencode=arch=compute_61,code=sm_61",
+            "src/kernels/gol.cu",
             "-o",
         ])
         .arg(&format!("{}/kernel.lib", &out_dir))
