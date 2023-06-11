@@ -39,12 +39,11 @@ fn div_ceil(x: usize, y: usize) -> usize {
     (x + y - 1) / y
 }
 
-const KERNEL_NAME: &str = "step";
 const WORK_GROUP_SIZE: usize = 256;
-const WORK_PER_THREAD: usize = 1;
+const WORK_PER_THREAD: usize = 3;
 
 const PADDING_X: usize = 1;
-const PADDING_Y: usize = 1;
+const PADDING_Y: usize = 16;
 
 impl Game {
     pub fn step(&mut self, steps: u32) {
@@ -52,8 +51,10 @@ impl Game {
             let mut args = Args::new();
             args.add_arg(&mut self.field_buffer);
             args.add_arg(&mut self.new_field_buffer);
+            args.add_arg(&mut (self.height as u32));
+            args.add_arg(&mut 1u32);
             self.stream
-                .launch(self.kernel, self.grid_dim, self.block_dim, &args, 0)
+                .launch(self.kernel, self.grid_dim, self.block_dim, &args, 2 * (WORK_GROUP_SIZE * WORK_PER_THREAD + 2) * size_of::<u32>())
                 .unwrap();
             mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
         }
@@ -63,10 +64,14 @@ impl Game {
 
     pub fn new(width: usize, height: usize) -> Self {
         let columns = div_ceil(width, 32) + 2 * PADDING_X;
-        let height = height + 2 * PADDING_Y;
+        let height = div_ceil(div_ceil(height, WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y) * (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y), WORK_PER_THREAD, ) * WORK_PER_THREAD + 2 * PADDING_Y;
 
-        let grid_dim = dim3 { x: (columns - 2 * PADDING_X) as c_uint, y: (height - 2 * PADDING_Y) as c_uint, z: 1 };
-        let block_dim = dim3 { x: 1, y: 1, z: 1 };
+        let global_work_size_x = columns - 2 * PADDING_X;
+        let global_work_size_y = (height - 2 * PADDING_Y) / (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y);
+        let local_work_size_y = WORK_GROUP_SIZE;
+
+        let grid_dim = dim3 { x: global_work_size_x as c_uint, y: global_work_size_y as c_uint, z: 1 };
+        let block_dim = dim3 { x: 1, y: local_work_size_y as c_uint, z: 1 };
 
         let kernel = Kernel::new(step);
         let stream = Stream::new().unwrap();

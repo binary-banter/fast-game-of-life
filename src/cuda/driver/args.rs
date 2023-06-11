@@ -27,3 +27,9 @@ impl<'a> Args<'a> {
 pub trait ToArg {
     fn to_arg(self) -> *mut c_void;
 }
+
+impl ToArg for &mut u32 {
+    fn to_arg(self) -> *mut c_void {
+        self as *mut u32 as *mut c_void
+    }
+}
