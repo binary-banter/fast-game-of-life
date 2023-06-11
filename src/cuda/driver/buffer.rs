@@ -1,10 +1,11 @@
 use crate::cuda::driver::check_error;
-use cuda_runtime_sys::{cudaError, cudaFree, cudaMalloc, cudaMemcpy, cudaMemcpyKind};
+use cuda_runtime_sys::{cudaError, cudaFree, cudaMalloc, cudaMemcpy, cudaMemcpyKind, cudaMemset};
 use std::os::raw::c_void;
+use std::os::raw::c_int;
 use std::ptr;
 
 pub struct Buffer {
-    pointer: *mut c_void,
+    pub pointer: *mut c_void,
     bytes: usize,
 }
 
@@ -20,7 +21,7 @@ impl Buffer {
 
     /// reads bytes length of bytes from buffer using an offset
     /// panics if it offset + bytes length overflows the buffer size
-    pub fn get(&self, offset: usize, bytes: &mut [u8]) -> Result<(), cudaError> {
+    pub fn read(&self, offset: usize, bytes: &mut [u8]) -> Result<(), cudaError> {
         assert!(offset + bytes.len() <= self.bytes);
 
         unsafe {
@@ -35,9 +36,15 @@ impl Buffer {
         Ok(())
     }
 
+    pub fn read_all(&self) -> Result<Vec<u8>, cudaError> {
+        let mut vec = vec![0; self.bytes];
+        self.read(0, &mut vec)?;
+        Ok(vec)
+    }
+
     /// writes bytes length of bytes to buffer using an offset
     /// panics if it offset + bytes length overflows the buffer size
-    pub fn set(&mut self, offset: usize, bytes: &[u8]) -> Result<(), cudaError> {
+    pub fn write(&mut self, offset: usize, bytes: &[u8]) -> Result<(), cudaError> {
         assert!(offset + bytes.len() <= self.bytes);
 
         unsafe {
@@ -50,6 +57,24 @@ impl Buffer {
         }
 
         Ok(())
+    }
+
+    pub fn write_multiple(&mut self, offset: usize, count: usize, value: u8) -> Result<(), cudaError> {
+        assert!(offset + count <= self.bytes);
+
+        unsafe {
+            check_error(cudaMemset(
+                self.pointer.offset(offset as isize),
+                value as c_int,
+                count,
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    pub fn write_all(&mut self, value: u8) -> Result<(), cudaError> {
+        self.write_multiple(0, self.bytes, value)
     }
 }
 
@@ -69,9 +94,9 @@ mod tests {
     #[test]
     fn write_read() {
         let mut buffer = Buffer::new(1).unwrap();
-        buffer.set(0, &[0b0110_1001]).unwrap();
+        buffer.write(0, &[0b0110_1001]).unwrap();
         let mut b: u8 = 0;
-        buffer.get(0, slice::from_mut(&mut b)).unwrap();
+        buffer.read(0, slice::from_mut(&mut b)).unwrap();
         assert_eq!(b, 0b0110_1001);
     }
 }

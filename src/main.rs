@@ -14,6 +14,7 @@ mod cuda;
 use crate::cuda::driver::check_error;
 #[cfg(feature = "cuda")]
 use cuda as game;
+use crate::cuda::driver::buffer::Buffer;
 use crate::cuda::driver::stream::Stream;
 
 #[link(name = "kernel", kind = "static")]
@@ -22,12 +23,16 @@ extern "C" {
 }
 
 pub fn main() {
-    let grid_dim = dim3 { x: 1, y: 1, z: 1 };
-
+    let grid_dim = dim3 { x: 64, y: 1, z: 1 };
     let block_dim = dim3 { x: 1, y: 1, z: 1 };
+
+    let mut buffer = Buffer::new(64).unwrap();
+    buffer.write_all(0).unwrap();
 
     let mut stream = Stream::new().unwrap();
     stream
-        .launch(step as *const c_void, grid_dim, block_dim, ptr::null_mut(), 0)
+        .launch(step as *const c_void, grid_dim, block_dim, [&mut buffer.pointer as *mut _ as *mut c_void].as_mut_ptr(), 0)
         .unwrap();
+
+    assert!(buffer.read_all().unwrap().into_iter().all(|a| a == 1));
 }

@@ -6,7 +6,7 @@ fn main() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
 
-    Command::new("nvcc")
+    let status = Command::new("nvcc")
         .args(&[
             "-O3",
             "-lib",
@@ -17,6 +17,9 @@ fn main() {
         .arg(&format!("{}/kernel.lib", &out_dir))
         .status()
         .unwrap();
+    if !status.success() {
+        panic!("Failed to compile kernel.");
+    }
 
     println!("cargo:rustc-link-search=native={}", &out_dir);
 }
