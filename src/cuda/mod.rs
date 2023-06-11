@@ -39,7 +39,7 @@ fn div_ceil(x: usize, y: usize) -> usize {
     (x + y - 1) / y
 }
 
-const WORK_GROUP_SIZE: usize = 256;
+const WORK_GROUP_SIZE: usize = 512;
 const WORK_PER_THREAD: usize = 3;
 
 const PADDING_X: usize = 1;
@@ -47,17 +47,32 @@ const PADDING_Y: usize = 16;
 
 impl Game {
     pub fn step(&mut self, steps: u32) {
-        for _ in 0..steps {
+        for _ in 0..steps / 16{
             let mut args = Args::new();
             args.add_arg(&mut self.field_buffer);
             args.add_arg(&mut self.new_field_buffer);
             args.add_arg(&mut (self.height as u32));
-            args.add_arg(&mut 1u32);
+            args.add_arg(&mut 16u32);
             self.stream
                 .launch(self.kernel, self.grid_dim, self.block_dim, &args, 2 * (WORK_GROUP_SIZE * WORK_PER_THREAD + 2) * size_of::<u32>())
                 .unwrap();
             mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
         }
+
+        let remaining_steps = steps % 16;
+        if remaining_steps == 0 {
+            return;
+        }
+
+        let mut args = Args::new();
+        args.add_arg(&mut self.field_buffer);
+        args.add_arg(&mut self.new_field_buffer);
+        args.add_arg(&mut (self.height as u32));
+        args.add_arg(&mut (remaining_steps as u32));
+        self.stream
+            .launch(self.kernel, self.grid_dim, self.block_dim, &args, 2 * (WORK_GROUP_SIZE * WORK_PER_THREAD + 2) * size_of::<u32>())
+            .unwrap();
+        mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
 
         self.stream.wait().unwrap();
     }

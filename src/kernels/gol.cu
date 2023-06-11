@@ -1,4 +1,4 @@
-#define WORK_GROUP_SIZE 256
+#define WORK_GROUP_SIZE 512
 #define PADDING_X 1
 #define PADDING_Y 16
 #define WORK_PER_THREAD 3
