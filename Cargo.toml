@@ -6,13 +6,15 @@ build = "build.rs"
 
 [dependencies]
 cuda-interface = { git = "https://github.com/binary-banter/cuda-interface", optional = true }
-opencl3 = "0.9.3"
+opencl3 = { version = "0.9.3", optional = true }
 
 [dev-dependencies]
 criterion = "0.5.1"
 
 [features]
 cuda = ["dep:cuda-interface"]
+opencl = ["dep:opencl3"]
+simd = []
 
 [profile.release]
 opt-level = 3

@@ -2,10 +2,17 @@
 fn main() {
     use std::env;
     use std::process::Command;
-
     println!("cargo:rerun-if-changed=src/kernels/gol.cu");
 
     let out_dir = env::var("OUT_DIR").unwrap();
+
+    let filename = if cfg!(target_os = "windows") {
+        "kernel.lib"
+    } else if cfg!(target_os = "linux") {
+        "libkernel.a"
+    } else {
+        panic!("Unsupported distribution.");
+    };
 
     let status = Command::new("nvcc")
         .args([
@@ -15,7 +22,7 @@ fn main() {
             "src/kernels/gol.cu",
             "-o",
         ])
-        .arg(&format!("{}/kernel.lib", &out_dir))
+        .arg(&format!("{}/{}", &out_dir, filename))
         .status()
         .unwrap();
     if !status.success() {
