@@ -1,19 +1,14 @@
-pub mod driver;
-
-use crate::cuda::driver::buffer::Buffer;
-use crate::cuda::driver::kernel::Kernel;
-use crate::cuda::driver::stream::Stream;
-use crate::game::driver::args::Args;
-use cuda_runtime_sys::dim3;
-use std::ffi::c_int;
+use cuda_interface::args::Args;
+use cuda_interface::buffer::Buffer;
+use cuda_interface::kernel::Kernel;
+use cuda_interface::stream::Stream;
 use std::fmt::{Display, Formatter};
+use std::mem;
 use std::mem::size_of;
-use std::os::raw::{c_uint, c_void};
-use std::{mem, ptr};
+use std::os::raw::c_void;
 
 /// The `Game` struct stores the state of an instance of Conway's Game of Life.
-///
-/// The underlying datatype for this struct is a u64.
+/// The underlying datatype for this struct is a u32.
 pub struct Game {
     /// This field represents the height of the `field` including padding.
     height: usize,
@@ -21,8 +16,8 @@ pub struct Game {
     /// This field represents the width of the `field` in u64s including padding.
     columns: usize,
 
-    grid_dim: dim3,
-    block_dim: dim3,
+    grid_dim: (u32, u32, u32),
+    block_dim: (u32, u32, u32),
 
     kernel: Kernel,
     stream: Stream,
@@ -48,14 +43,14 @@ const PADDING_Y: usize = 16;
 impl Game {
     pub fn step(&mut self, steps: u32) {
         for _ in 0..steps / 16 {
-            let mut args = Args::new();
+            let mut args = Args::default();
             args.add_arg(&mut self.field_buffer);
             args.add_arg(&mut self.new_field_buffer);
             args.add_arg(&mut (self.height as u32));
             args.add_arg(&mut 16u32);
             self.stream
                 .launch(
-                    self.kernel,
+                    &self.kernel,
                     self.grid_dim,
                     self.block_dim,
                     &args,
@@ -65,19 +60,19 @@ impl Game {
             mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
         }
 
-        let remaining_steps = steps % 16;
+        let mut remaining_steps = steps % 16;
         if remaining_steps == 0 {
             return;
         }
 
-        let mut args = Args::new();
+        let mut args = Args::default();
         args.add_arg(&mut self.field_buffer);
         args.add_arg(&mut self.new_field_buffer);
         args.add_arg(&mut (self.height as u32));
-        args.add_arg(&mut (remaining_steps as u32));
+        args.add_arg(&mut remaining_steps);
         self.stream
             .launch(
-                self.kernel,
+                &self.kernel,
                 self.grid_dim,
                 self.block_dim,
                 &args,
@@ -103,16 +98,8 @@ impl Game {
             (height - 2 * PADDING_Y) / (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y);
         let local_work_size_y = WORK_GROUP_SIZE;
 
-        let grid_dim = dim3 {
-            x: global_work_size_x as c_uint,
-            y: global_work_size_y as c_uint,
-            z: 1,
-        };
-        let block_dim = dim3 {
-            x: 1,
-            y: local_work_size_y as c_uint,
-            z: 1,
-        };
+        let grid_dim = (global_work_size_x as u32, global_work_size_y as u32, 1);
+        let block_dim = (1, local_work_size_y as u32, 1);
 
         let kernel = Kernel::new(step);
         let stream = Stream::new().unwrap();

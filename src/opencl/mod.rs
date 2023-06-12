@@ -10,8 +10,7 @@ use std::mem::size_of;
 use std::{mem, ptr};
 
 /// The `Game` struct stores the state of an instance of Conway's Game of Life.
-///
-/// The underlying datatype for this struct is a u64.
+/// The underlying datatype for this struct is a u32.
 #[derive(Debug)]
 pub struct Game {
     /// This field represents the height of the `field` including padding.
@@ -52,12 +51,9 @@ impl Game {
                         .set_arg(&self.new_field_buffer)
                         .set_arg(&(self.height as u32))
                         .set_arg(&16u32)
-                        .set_global_work_sizes(&vec![
-                            global_work_size,
-                            self.columns - 2 * PADDING_X,
-                        ])
-                        .set_global_work_offsets(&vec![0, PADDING_X])
-                        .set_local_work_sizes(&vec![WORK_GROUP_SIZE, 1])
+                        .set_global_work_sizes(&[global_work_size, self.columns - 2 * PADDING_X])
+                        .set_global_work_offsets(&[0, PADDING_X])
+                        .set_local_work_sizes(&[WORK_GROUP_SIZE, 1])
                         .enqueue_nd_range(&self.queue)
                         .unwrap()
                 };
@@ -80,9 +76,9 @@ impl Game {
                 .set_arg(&self.new_field_buffer)
                 .set_arg(&(self.height as u32))
                 .set_arg(&remaining_steps)
-                .set_global_work_sizes(&vec![global_work_size, self.columns - 2 * PADDING_X])
-                .set_global_work_offsets(&vec![0, PADDING_X])
-                .set_local_work_sizes(&vec![WORK_GROUP_SIZE, 1])
+                .set_global_work_sizes(&[global_work_size, self.columns - 2 * PADDING_X])
+                .set_global_work_offsets(&[0, PADDING_X])
+                .set_local_work_sizes(&[WORK_GROUP_SIZE, 1])
                 .enqueue_nd_range(&self.queue)
                 .unwrap()
         }

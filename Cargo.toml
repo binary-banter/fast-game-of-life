@@ -5,14 +5,14 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
+cuda-interface = { git = "https://github.com/binary-banter/cuda-interface", optional = true }
 opencl3 = "0.9.3"
-cuda-runtime-sys = "0.3.0-alpha.1"
 
 [dev-dependencies]
 criterion = "0.5.1"
 
 [features]
-cuda = []
+cuda = ["dep:cuda-interface"]
 
 [profile.release]
 opt-level = 3

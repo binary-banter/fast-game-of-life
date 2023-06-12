@@ -1,8 +1,8 @@
-use std::env;
-use std::process::Command;
-
 #[cfg(feature = "cuda")]
 fn main() {
+    use std::env;
+    use std::process::Command;
+
     println!("cargo:rerun-if-changed=src/kernels/gol.cu");
 
     let out_dir = env::var("OUT_DIR").unwrap();
