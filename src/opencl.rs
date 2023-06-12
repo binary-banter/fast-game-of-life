@@ -102,7 +102,7 @@ impl Game {
 
         let program = Program::create_and_build_from_source(
             &context,
-            include_str!("../kernels/gol.cl"),
+            include_str!("./kernels/gol.cl"),
             OPTIMIZATIONS,
         )
         .expect("Program::create_and_build_from_source failed");
