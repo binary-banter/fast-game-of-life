@@ -1,3 +1,7 @@
+#![cfg_attr(feature = "simd", feature(portable_simd))]
+#![cfg_attr(feature = "simd", feature(array_windows))]
+#![cfg_attr(feature = "simd", feature(array_chunks))]
+
 #[cfg(not(any(feature = "opencl", feature = "cuda", feature = "simd")))]
 compile_error!("No features were selected!");
 
