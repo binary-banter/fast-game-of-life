@@ -13,14 +13,14 @@ compile_error!("The \"cuda\" and \"simd\" features are mutually exclusive!");
 #[cfg(feature = "opencl")]
 pub mod opencl;
 #[cfg(feature = "opencl")]
-use opencl as game;
+pub use opencl as game;
 
 #[cfg(feature = "cuda")]
 pub mod cuda;
 #[cfg(feature = "cuda")]
-use cuda as game;
+pub use cuda as game;
 
 #[cfg(feature = "simd")]
 pub mod simd;
 #[cfg(feature = "simd")]
-use simd as game;
+pub use simd as game;
