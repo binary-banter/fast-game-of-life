@@ -5,7 +5,7 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
-cuda-interface = { git = "https://github.com/binary-banter/cuda-interface", optional = true }
+cuda-interface = { version = "0.1.1", git = "https://github.com/binary-banter/cuda-interface", optional = true }
 opencl3 = { version = "0.9.3", optional = true }
 itertools = {version = "0.10.5", optional = true }
 

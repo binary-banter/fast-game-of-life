@@ -42,12 +42,14 @@ const PADDING_Y: usize = 16;
 
 impl Game {
     pub fn step(&mut self, steps: u32) {
+        let height = self.height as u32;
+        let step_size = 16;
         for _ in 0..steps / 16 {
             let mut args = Args::default();
             args.add_arg(&mut self.field_buffer);
             args.add_arg(&mut self.new_field_buffer);
-            args.add_arg(&mut (self.height as u32));
-            args.add_arg(&mut 16u32);
+            args.add_arg(&height);
+            args.add_arg(&step_size);
             self.stream
                 .launch(
                     &self.kernel,
@@ -60,7 +62,7 @@ impl Game {
             mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
         }
 
-        let mut remaining_steps = steps % 16;
+        let remaining_steps = steps % 16;
         if remaining_steps == 0 {
             return;
         }
@@ -68,8 +70,8 @@ impl Game {
         let mut args = Args::default();
         args.add_arg(&mut self.field_buffer);
         args.add_arg(&mut self.new_field_buffer);
-        args.add_arg(&mut (self.height as u32));
-        args.add_arg(&mut remaining_steps);
+        args.add_arg(&height);
+        args.add_arg(&remaining_steps);
         self.stream
             .launch(
                 &self.kernel,
@@ -104,9 +106,9 @@ impl Game {
         let kernel = Kernel::new(step);
         let stream = Stream::new().unwrap();
 
-        let mut field_buffer = Buffer::new(columns * height * size_of::<u32>()).unwrap();
+        let mut field_buffer = Buffer::new(columns * height).unwrap();
         field_buffer.zero().unwrap();
-        let mut new_field_buffer = Buffer::new(columns * height * size_of::<u32>()).unwrap();
+        let mut new_field_buffer = Buffer::new(columns * height).unwrap();
         new_field_buffer.zero().unwrap();
 
         Game {
