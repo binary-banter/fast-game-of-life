@@ -1,4 +1,4 @@
-use gol_cuda::game::Game;
+use fast_game_of_life::game::Game;
 
 #[test]
 fn off_0_neighbors() {

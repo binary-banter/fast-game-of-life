@@ -1,24 +1,5 @@
-#define WORK_GROUP_SIZE 256
-#define PADDING_Y 16
-#define WORK_PER_THREAD 3
 #define SIMULATION_SIZE (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
 
-/// reduction table middle
-///        [a0|
-///        |a1|
-///        |a2]
-///        [a3|
-///        |a4|
-///        |a5]
-///        [a6|
-///        |a7]
-/// ---------- +
-///    [b0|[a8|
-///    |b1||a9|
-///    |b2]|aA]
-/// ---------- +
-/// c0  b3 aB
-///     b4
 uint substep(const uint a0,
              const uint a1,
              const uint a2,

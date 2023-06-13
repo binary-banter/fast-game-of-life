@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use opencl3::command_queue::{CommandQueue, CL_QUEUE_PROFILING_ENABLE};
 use opencl3::context::Context;
 use opencl3::device::{get_all_devices, Device, CL_DEVICE_TYPE_GPU};
@@ -8,6 +9,19 @@ use opencl3::types::CL_BLOCKING;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 use std::{mem, ptr};
+use toml::Table;
+
+const KERNEL_NAME: &str = "step";
+const OPTIMIZATIONS: &str = "";
+lazy_static! {
+    static ref SETTINGS: Table = include_str!("../settings.toml").parse::<Table>().unwrap();
+    static ref WORK_GROUP_SIZE: usize =
+        SETTINGS["opencl"]["work-group-size"].as_integer().unwrap() as usize;
+    static ref WORK_PER_THREAD: usize =
+        SETTINGS["opencl"]["work-per-thread"].as_integer().unwrap() as usize;
+    static ref PADDING_X: usize = SETTINGS["opencl"]["padding-x"].as_integer().unwrap() as usize;
+    static ref PADDING_Y: usize = SETTINGS["opencl"]["padding-y"].as_integer().unwrap() as usize;
+}
 
 /// The `Game` struct stores the state of an instance of Conway's Game of Life.
 /// The underlying datatype for this struct is a u32.
@@ -30,19 +44,11 @@ fn div_ceil(x: usize, y: usize) -> usize {
     (x + y - 1) / y
 }
 
-const KERNEL_NAME: &str = "step";
-const OPTIMIZATIONS: &str = "";
-const WORK_GROUP_SIZE: usize = 256;
-const WORK_PER_THREAD: usize = 3;
-
-const PADDING_X: usize = 1;
-const PADDING_Y: usize = 16;
-
 impl Game {
     pub fn step(&mut self, steps: u32) {
-        let global_work_size = (self.height - 2 * PADDING_Y)
-            / (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
-            * WORK_GROUP_SIZE;
+        let global_work_size = (self.height - 2 * *PADDING_Y)
+            / (*WORK_GROUP_SIZE * *WORK_PER_THREAD - 2 * *PADDING_Y)
+            * *WORK_GROUP_SIZE;
         if let Some(event) = (0..steps / 16)
             .map(|_| {
                 let event = unsafe {
@@ -51,9 +57,9 @@ impl Game {
                         .set_arg(&self.new_field_buffer)
                         .set_arg(&(self.height as u32))
                         .set_arg(&16u32)
-                        .set_global_work_sizes(&[global_work_size, self.columns - 2 * PADDING_X])
-                        .set_global_work_offsets(&[0, PADDING_X])
-                        .set_local_work_sizes(&[WORK_GROUP_SIZE, 1])
+                        .set_global_work_sizes(&[global_work_size, self.columns - 2 * *PADDING_X])
+                        .set_global_work_offsets(&[0, *PADDING_X])
+                        .set_local_work_sizes(&[*WORK_GROUP_SIZE, 1])
                         .enqueue_nd_range(&self.queue)
                         .unwrap()
                 };
@@ -76,9 +82,9 @@ impl Game {
                 .set_arg(&self.new_field_buffer)
                 .set_arg(&(self.height as u32))
                 .set_arg(&remaining_steps)
-                .set_global_work_sizes(&[global_work_size, self.columns - 2 * PADDING_X])
-                .set_global_work_offsets(&[0, PADDING_X])
-                .set_local_work_sizes(&[WORK_GROUP_SIZE, 1])
+                .set_global_work_sizes(&[global_work_size, self.columns - 2 * *PADDING_X])
+                .set_global_work_offsets(&[0, *PADDING_X])
+                .set_local_work_sizes(&[*WORK_GROUP_SIZE, 1])
                 .enqueue_nd_range(&self.queue)
                 .unwrap()
         }
@@ -100,21 +106,21 @@ impl Game {
         let queue = CommandQueue::create_default(&context, CL_QUEUE_PROFILING_ENABLE)
             .expect("CommandQueue::create_default failed");
 
-        let program = Program::create_and_build_from_source(
-            &context,
-            include_str!("./kernels/gol.cl"),
-            OPTIMIZATIONS,
-        )
-        .expect("Program::create_and_build_from_source failed");
+        let mut program = String::new();
+        program += include_str!("./kernels/constants.h");
+        program += include_str!("./kernels/gol.cl");
+
+        let program = Program::create_and_build_from_source(&context, &program, OPTIMIZATIONS)
+            .expect("Program::create_and_build_from_source failed");
         let kernel = Kernel::create(&program, KERNEL_NAME).expect("Kernel::create failed");
 
-        let columns = div_ceil(width, 32) + 2 * PADDING_X;
+        let columns = div_ceil(width, 32) + 2 * *PADDING_X;
         let height = div_ceil(
-            div_ceil(height, WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
-                * (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y),
-            WORK_PER_THREAD,
-        ) * WORK_PER_THREAD
-            + 2 * PADDING_Y;
+            div_ceil(height, *WORK_GROUP_SIZE * *WORK_PER_THREAD - 2 * *PADDING_Y)
+                * (*WORK_GROUP_SIZE * *WORK_PER_THREAD - 2 * *PADDING_Y),
+            *WORK_PER_THREAD,
+        ) * *WORK_PER_THREAD
+            + 2 * *PADDING_Y;
 
         let mut field_buffer = unsafe {
             Buffer::create(
@@ -175,9 +181,9 @@ impl Game {
     }
 
     pub fn set(&mut self, x: usize, y: usize) {
-        let column = x / 32 + PADDING_X;
+        let column = x / 32 + *PADDING_X;
         let nibble = 0x8000_0000 >> (x % 32);
-        let i = (y + PADDING_Y) + column * self.height;
+        let i = (y + *PADDING_Y) + column * self.height;
         let mut word: u32 = 0;
         unsafe {
             self.queue
@@ -205,9 +211,9 @@ impl Game {
     }
 
     pub fn get(&self, x: usize, y: usize) -> bool {
-        let column = x / 32 + PADDING_X;
+        let column = x / 32 + *PADDING_X;
         let nibble = 0x8000_0000 >> (x % 32);
-        let i = (y + PADDING_Y) + column * self.height;
+        let i = (y + *PADDING_Y) + column * self.height;
         let mut word: u32 = 0;
         unsafe {
             self.queue
@@ -228,8 +234,8 @@ impl Display for Game {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut frame = String::new();
 
-        for y in 0..self.height - 2 * PADDING_Y {
-            for x in 0..(self.columns - 2 * PADDING_X) * 32 {
+        for y in 0..self.height - 2 * *PADDING_Y {
+            for x in 0..(self.columns - 2 * *PADDING_X) * 32 {
                 if self.get(x, y) {
                     frame.push('█');
                 } else {

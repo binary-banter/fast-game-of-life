@@ -1,4 +1,4 @@
-use gol_cuda::game::Game;
+use fast_game_of_life::game::Game;
 
 pub fn main() {
     let mut game: Game = Game::new(16, 16);

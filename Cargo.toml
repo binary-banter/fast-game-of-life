@@ -1,5 +1,5 @@
 [package]
-name = "gol_cuda"
+name = "fast-game-of-life"
 version = "0.1.0"
 edition = "2021"
 build = "build.rs"
@@ -8,6 +8,11 @@ build = "build.rs"
 cuda-interface = { version = "0.1.1", git = "https://github.com/binary-banter/cuda-interface", optional = true }
 opencl3 = { version = "0.9.3", optional = true }
 itertools = {version = "0.10.5", optional = true }
+lazy_static = "1.4.0"
+toml = "0.7.4"
+
+[build-dependencies]
+toml = "0.7.4"
 
 [dev-dependencies]
 criterion = "0.5.1"

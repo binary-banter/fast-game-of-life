@@ -1,7 +1,4 @@
-#define WORK_GROUP_SIZE 128
-#define PADDING_X 1
-#define PADDING_Y 16
-#define WORK_PER_THREAD 3
+#include "constants.h"
 #define SIMULATION_SIZE (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
 
 __device__ unsigned int substep(const unsigned int a0,
