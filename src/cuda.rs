@@ -34,8 +34,8 @@ fn div_ceil(x: usize, y: usize) -> usize {
     (x + y - 1) / y
 }
 
-const WORK_GROUP_SIZE: usize = 896;
-const WORK_PER_THREAD: usize = 1;
+const WORK_GROUP_SIZE: usize = 128;
+const WORK_PER_THREAD: usize = 3;
 
 const PADDING_X: usize = 1;
 const PADDING_Y: usize = 16;
@@ -64,6 +64,7 @@ impl Game {
 
         let remaining_steps = steps % 16;
         if remaining_steps == 0 {
+            self.stream.wait().unwrap();
             return;
         }
 

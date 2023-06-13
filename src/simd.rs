@@ -36,7 +36,8 @@ use std::simd::{LaneCount, Simd, SupportedLaneCount};
 /// The underlying datatype for this struct is a u64.
 #[derive(Debug)]
 pub struct Game<const N: usize = 8>
-    where LaneCount<N>: SupportedLaneCount,
+where
+    LaneCount<N>: SupportedLaneCount,
 {
     /// This field stores the cells in a contiguous array of nibbles,
     /// where 0b0000 represents dead and 0b0001 alive.
@@ -57,7 +58,8 @@ fn div_ceil(x: usize, y: usize) -> usize {
 }
 
 impl<const N: usize> Game<N>
-    where LaneCount<N>: SupportedLaneCount,
+where
+    LaneCount<N>: SupportedLaneCount,
 {
     pub fn new(width: usize, height: usize) -> Self {
         let columns = div_ceil(div_ceil(width * 4, 64), N) * N + 2;
@@ -128,8 +130,8 @@ impl<const N: usize> Game<N>
 }
 
 impl<const N: usize> Display for Game<N>
-    where
-        LaneCount<N>: SupportedLaneCount,
+where
+    LaneCount<N>: SupportedLaneCount,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut frame = String::new();
@@ -154,8 +156,8 @@ impl<const N: usize> Display for Game<N>
 }
 
 pub fn shl_4bit<const N: usize>(v: Simd<u64, N>) -> Simd<u64, N>
-    where
-        LaneCount<N>: SupportedLaneCount,
+where
+    LaneCount<N>: SupportedLaneCount,
 {
     let mut mask = [0x00000_0000_0000_000F; N];
     mask[N - 1] = 0;
@@ -166,8 +168,8 @@ pub fn shl_4bit<const N: usize>(v: Simd<u64, N>) -> Simd<u64, N>
 }
 
 pub fn shr_4bit<const N: usize>(v: Simd<u64, N>) -> Simd<u64, N>
-    where
-        LaneCount<N>: SupportedLaneCount,
+where
+    LaneCount<N>: SupportedLaneCount,
 {
     let mut mask = [0xF000_0000_0000_0000; N];
     mask[0] = 0;

@@ -17,6 +17,8 @@ fn main() {
     let status = Command::new("nvcc")
         .args([
             "-O3",
+            "--compiler-options",
+            "-fpie",
             "-lib",
             "-gencode=arch=compute_61,code=sm_61",
             "src/kernels/gol.cu",
