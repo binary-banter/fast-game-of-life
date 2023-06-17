@@ -21,6 +21,7 @@ criterion = "0.5.1"
 cuda = ["dep:cuda-interface"]
 opencl = ["dep:opencl3"]
 simd = ["dep:itertools"]
+trivial = []
 
 [profile.release]
 opt-level = 3

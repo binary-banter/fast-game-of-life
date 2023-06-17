@@ -2,7 +2,12 @@
 #![cfg_attr(feature = "simd", feature(array_windows))]
 #![cfg_attr(feature = "simd", feature(array_chunks))]
 
-#[cfg(not(any(feature = "opencl", feature = "cuda", feature = "simd")))]
+#[cfg(not(any(
+    feature = "opencl",
+    feature = "cuda",
+    feature = "simd",
+    feature = "trivial"
+)))]
 compile_error!("No features were selected!");
 
 #[cfg(all(feature = "opencl", feature = "cuda"))]
@@ -26,5 +31,12 @@ pub use cuda as game;
 
 #[cfg(feature = "simd")]
 pub mod simd;
+
 #[cfg(feature = "simd")]
 pub use simd as game;
+
+#[cfg(feature = "trivial")]
+pub mod trivial;
+
+#[cfg(feature = "trivial")]
+pub use trivial as game;
