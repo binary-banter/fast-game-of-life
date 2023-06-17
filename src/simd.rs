@@ -137,11 +137,11 @@ where
 
                     // fix bits in neighbouring columns
                     nbs[0][0] |= (self.field[i - self.columns - 1] & 1) << 63; // top left
-                    nbs[2][N - 1] |= (self.field[i - self.columns + 1] & (1 << 63)) >> 63; // top right
+                    nbs[2][N - 1] |= (self.field[i - self.columns + N] & (1 << 63)) >> 63; // top right
                     nbs[3][0] |= (self.field[i - 1] & 0x1) << 63; // left
-                    nbs[4][N - 1] |= (self.field[i + 1] & (1 << 63)) >> 63; // right
-                    nbs[5][0] |= (self.field[i + self.columns - 1] & 0x1) << 63; // bottom left
-                    nbs[7][N - 1] |= (self.field[i + self.columns + 1] & (1 << 63)) >> 63; // bottom right
+                    nbs[4][N - 1] |= (self.field[i + N] & (1 << 63)) >> 63; // right
+                    nbs[5][0] |= (self.field[i + self.columns - 1] & 1) << 63; // bottom left
+                    nbs[7][N - 1] |= (self.field[i + self.columns + N] & (1 << 63)) >> 63; // bottom right
 
                     self.new_field[i..i + N]
                         .copy_from_slice(Self::sub_step(center, &nbs).as_array());
