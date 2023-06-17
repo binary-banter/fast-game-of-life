@@ -26,7 +26,6 @@
 //! assert!(game.get(15,1));
 //! ```
 
-use itertools::Itertools;
 use std::fmt::{Display, Formatter};
 use std::mem::swap;
 use std::simd::{LaneCount, Simd, SupportedLaneCount};
@@ -62,7 +61,7 @@ where
     LaneCount<N>: SupportedLaneCount,
 {
     pub fn new(width: usize, height: usize) -> Self {
-        let columns = div_ceil(div_ceil(width * 4, 64), N) * N + 2;
+        let columns = div_ceil(div_ceil(width, 64), N) * N + 2;
         let height = height + 2;
         Game {
             field: vec![0; columns * height],
@@ -73,56 +72,81 @@ where
     }
 
     pub fn set(&mut self, x: usize, y: usize) {
-        let column = x / 16 + 1;
-        let nibble = 0x1000_0000_0000_0000 >> ((x % 16) * 4);
-        self.field[(y + 1) * self.columns + column] |= nibble;
+        let column = x / 64 + 1;
+        let bit = 0x8000_0000_0000_0000 >> (x % 64);
+        self.field[(y + 1) * self.columns + column] |= bit;
     }
 
     pub fn get(&self, x: usize, y: usize) -> bool {
-        let column = x / 16 + 1;
-        let nibble = 0x1000_0000_0000_0000 >> ((x % 16) * 4);
-        self.field[(y + 1) * self.columns + column] & nibble != 0
+        let column = x / 64 + 1;
+        let bit = 0x8000_0000_0000_0000 >> (x % 64);
+        (self.field[(y + 1) * self.columns + column] & bit) != 0
+    }
+
+    fn sub_step(mut center: Simd<u64, N>, nbs: &[Simd<u64, N>; 8]) -> Simd<u64, N> {
+        // stage 0
+        let ta0 = nbs[0] ^ nbs[1];
+        let a8 = ta0 ^ nbs[2];
+        let b0 = (nbs[0] & nbs[1]) | (ta0 & nbs[2]);
+
+        let ta3 = nbs[3] ^ nbs[4];
+        let a9 = ta3 ^ nbs[5];
+        let b1 = (nbs[3] & nbs[4]) | (ta3 & nbs[5]);
+
+        let aa = nbs[6] ^ nbs[7];
+        let b2 = nbs[6] & nbs[7];
+
+        // stage 1
+        let ta8 = a8 ^ a9;
+        let ab = ta8 ^ aa;
+        let b3 = (a8 & a9) | (ta8 & aa);
+
+        let tb0 = b0 ^ b1;
+        let b4 = tb0 ^ b2;
+        let c0 = (b0 & b1) | (tb0 & b2);
+
+        center |= ab;
+        center &= b3 ^ b4;
+        center &= !c0;
+
+        return center;
+    }
+
+    fn get_simd(&self, i: usize) -> Simd<u64, N> {
+        Simd::from_slice(&self.field[i..i + N])
     }
 
     pub fn step(&mut self, steps: u32) {
         for _ in 0..steps {
-            (self.field.chunks(self.columns))
-                .tuple_windows()
-                .zip(self.new_field.chunks_mut(self.columns).skip(1))
-                .for_each(|((prev, cur, next), new)| {
-                    for i in (1..self.columns - 1).step_by(N) {
-                        // Logic for common cases
-                        let mut count =
-                            Simd::from_slice(&prev[i..i + N]) + Simd::from_slice(&next[i..i + N]);
-                        let partial = count + Simd::from_slice(&cur[i..i + N]);
-                        count += shl_4bit(partial);
-                        count += shr_4bit(partial);
+            for y in 1..self.height - 1 {
+                for x in (1..self.columns - 1).step_by(N) {
+                    let i = y * self.columns + x;
 
-                        // Logic for edge cases
-                        // add cells on the right in the next block
-                        let nibble1 = (prev[i + N] + cur[i + N] + next[i + N]) >> 60;
-                        // add cells on the left in the previous block
-                        let nibble2 = (prev[i - 1] + cur[i - 1] + next[i - 1]) << 60;
-                        let mut arr = [0; N];
-                        if N == 1 {
-                            arr[0] = nibble1 | nibble2;
-                        } else {
-                            arr[0] = nibble2;
-                            arr[N - 1] = nibble1;
-                        }
-                        count += Simd::<u64, N>::from_array(arr);
+                    let center = self.get_simd(i);
 
-                        let mut result = Simd::from_slice(&cur[i..i + N]);
+                    let mut nbs = [
+                        shr(self.get_simd(i - self.columns)), // top left
+                        self.get_simd(i - self.columns),      // top
+                        shl(self.get_simd(i - self.columns)), // top right
+                        shr(self.get_simd(i)),                // middle left
+                        shl(self.get_simd(i)),                // middle right
+                        shr(self.get_simd(i + self.columns)), // bottom left
+                        self.get_simd(i + self.columns),      // bottom
+                        shl(self.get_simd(i + self.columns)), // bottom right
+                    ];
 
-                        result |= count;
-                        result &= count >> Simd::<u64, N>::splat(1);
-                        result &= !(count >> Simd::<u64, N>::splat(2));
-                        result &= !(count >> Simd::<u64, N>::splat(3));
-                        result &= Simd::splat(0x1111_1111_1111_1111);
+                    // fix bits in neighbouring columns
+                    nbs[0][0] |= (self.field[i - self.columns - 1] & 1) << 63; // top left
+                    nbs[2][N - 1] |= (self.field[i - self.columns + 1] & (1 << 63)) >> 63; // top right
+                    nbs[3][0] |= (self.field[i - 1] & 0x1) << 63; // left
+                    nbs[4][N - 1] |= (self.field[i + 1] & (1 << 63)) >> 63; // right
+                    nbs[5][0] |= (self.field[i + self.columns - 1] & 0x1) << 63; // bottom left
+                    nbs[7][N - 1] |= (self.field[i + self.columns + 1] & (1 << 63)) >> 63; // bottom right
 
-                        new[i..i + N].copy_from_slice(result.as_array());
-                    }
-                });
+                    self.new_field[i..i + N]
+                        .copy_from_slice(Self::sub_step(center, &nbs).as_array());
+                }
+            }
 
             swap(&mut self.field, &mut self.new_field);
         }
@@ -136,16 +160,12 @@ where
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut frame = String::new();
 
-        for row in 1..self.height - 1 {
-            for column in 1..self.columns - 1 {
-                for byte in self.field[row * self.columns + column].to_be_bytes() {
-                    frame.push_str(match byte {
-                        0b0000_0000 => "..",
-                        0b0000_0001 => ".█",
-                        0b0001_0000 => "█.",
-                        0b0001_0001 => "██",
-                        _ => unreachable!(),
-                    });
+        for y in 0..self.height - 2 {
+            for x in 0..self.columns - 2 {
+                if self.get(x, y) {
+                    frame.push('█');
+                } else {
+                    frame.push('.');
                 }
             }
             frame.push('\n');
@@ -155,26 +175,26 @@ where
     }
 }
 
-pub fn shl_4bit<const N: usize>(v: Simd<u64, N>) -> Simd<u64, N>
+pub fn shl<const N: usize>(v: Simd<u64, N>) -> Simd<u64, N>
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    let mut mask = [0x00000_0000_0000_000F; N];
+    let mut mask = [0x00000_0000_0000_0001; N];
     mask[N - 1] = 0;
 
-    let neighbouring_nibbles =
-        (v >> Simd::splat(60)).rotate_lanes_left::<1>() & Simd::from_array(mask);
-    (v << Simd::splat(4)) | neighbouring_nibbles
+    let neighbouring_bits =
+        (v >> Simd::splat(63)).rotate_lanes_left::<1>() & Simd::from_array(mask);
+    (v << Simd::splat(1)) | neighbouring_bits
 }
 
-pub fn shr_4bit<const N: usize>(v: Simd<u64, N>) -> Simd<u64, N>
+pub fn shr<const N: usize>(v: Simd<u64, N>) -> Simd<u64, N>
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    let mut mask = [0xF000_0000_0000_0000; N];
+    let mut mask = [0x8000_0000_0000_0000; N];
     mask[0] = 0;
 
-    let neighbouring_nibbles =
-        (v << Simd::splat(60)).rotate_lanes_right::<1>() & Simd::from_array(mask);
-    (v >> Simd::splat(4)) | neighbouring_nibbles
+    let neighbouring_bits =
+        (v << Simd::splat(63)).rotate_lanes_right::<1>() & Simd::from_array(mask);
+    (v >> Simd::splat(1)) | neighbouring_bits
 }
