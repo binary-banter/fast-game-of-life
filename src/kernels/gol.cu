@@ -45,26 +45,29 @@ extern "C" __global__ void step(const unsigned int *field, unsigned int *new_fie
     const size_t py = ly*WORK_PER_THREAD;
     const size_t i = x * height + y-ly+py;
 
-    __shared__ unsigned int left[WORK_GROUP_SIZE * WORK_PER_THREAD + 2];
-    __shared__ unsigned int right[WORK_GROUP_SIZE * WORK_PER_THREAD + 2];
+    unsigned int left[WORK_PER_THREAD + 2];
+    unsigned int right[WORK_PER_THREAD + 2];
 
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
         unsigned int col_l = field[i + row - height];
         unsigned int col_m = field[i + row];
         unsigned int col_r = field[i + row + height];
 
-        left[py + row + 1] = (col_l << 16) | (col_m >> 16);
-        right[py + row + 1] = (col_m << 16) | (col_r >> 16);
+        left[row + 1] = (col_l << 16) | (col_m >> 16);
+        right[row + 1] = (col_m << 16) | (col_r >> 16);
     }
 
     for (size_t step = 0; step < steps; step++) {
-        __syncthreads();
-
         unsigned int result_left[WORK_PER_THREAD];
         unsigned int result_right[WORK_PER_THREAD];
 
+        left[0] = __shfl_up_sync(-1, left[WORK_PER_THREAD], 1);
+        right[0] = __shfl_up_sync(-1, right[WORK_PER_THREAD], 1);
+        left[WORK_PER_THREAD + 1] = __shfl_down_sync(-1, left[1], 1);
+        right[WORK_PER_THREAD + 1] = __shfl_down_sync(-1, right[1], 1);
+
         for (size_t row = 0; row < WORK_PER_THREAD; row++) {
-            size_t ly2 = py + row + 1;
+            size_t ly2 = row + 1;
 
             // left
             {
@@ -105,16 +108,15 @@ extern "C" __global__ void step(const unsigned int *field, unsigned int *new_fie
             }
         }
 
-        __syncthreads();
         for(size_t row = 0; row < WORK_PER_THREAD; row++) {
-            left[py + row + 1] = result_left[row];
-            right[py + row + 1] = result_right[row];
+            left[row + 1] = result_left[row];
+            right[row + 1] = result_right[row];
         }
     }
 
     for(size_t row = 0; row < WORK_PER_THREAD; row++) {
         if(py + row >= PADDING_Y && py + row < WORK_GROUP_SIZE * WORK_PER_THREAD - PADDING_Y) {
-            new_field[i + row] = (left[py + row + 1] << 16) | (right[py + row + 1] >> 16);
+            new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16);
         }
     }
 }
