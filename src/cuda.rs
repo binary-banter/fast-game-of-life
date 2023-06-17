@@ -57,13 +57,7 @@ impl Game {
             args.add_arg(&height);
             args.add_arg(&step_size);
             self.stream
-                .launch(
-                    &self.kernel,
-                    self.grid_dim,
-                    self.block_dim,
-                    &args,
-                    2 * (*WORK_GROUP_SIZE * *WORK_PER_THREAD + 2) * size_of::<u32>(),
-                )
+                .launch(&self.kernel, self.grid_dim, self.block_dim, &args, 0)
                 .unwrap();
             mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
         }
@@ -80,13 +74,7 @@ impl Game {
         args.add_arg(&height);
         args.add_arg(&remaining_steps);
         self.stream
-            .launch(
-                &self.kernel,
-                self.grid_dim,
-                self.block_dim,
-                &args,
-                2 * (*WORK_GROUP_SIZE * *WORK_PER_THREAD + 2) * size_of::<u32>(),
-            )
+            .launch(&self.kernel, self.grid_dim, self.block_dim, &args, 0)
             .unwrap();
         mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
 
