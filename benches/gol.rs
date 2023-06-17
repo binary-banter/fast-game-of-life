@@ -9,7 +9,7 @@ fn step_1024(c: &mut Criterion) {
 
 criterion_group!(
     name = benches;
-    config = Criterion::default();
+    config = Criterion::default().sample_size(10);
     targets = step_1024
 );
 criterion_main!(benches);
