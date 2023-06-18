@@ -1,54 +1,17 @@
-//! This library provides a quick way to simulate dense instances of Conway's Game of Life.
-//!
-//! To create an instance, create a new Game struct with a provided number of SIMD lanes.
-//! To enable cells, use `set`. To do one step, use `step`. To read a particular cell, use `get`.
-//!
-//! For example:
-//! ```
-//! use game_of_life::Game;
-//!
-//! let mut game = Game::<8>::new(128, 128);
-//!
-//! // glider
-//! game.set(4, 5);
-//! game.set(5, 6);
-//! game.set(6, 4);
-//! game.set(6, 5);
-//! game.set(6, 6);
-//!
-//! // blinker
-//! game.set(15, 0);
-//! game.set(15, 1);
-//! game.set(15, 2);
-//!
-//! game.step();
-//!
-//! assert!(game.get(15,1));
-//! ```
-
 use std::fmt::{Display, Formatter};
 use std::mem::swap;
 use std::simd::{LaneCount, Simd, SupportedLaneCount};
+use std::thread::available_parallelism;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 
-/// The `Game` struct stores the state of an instance of Conway's Game of Life.
-///
-/// The underlying datatype for this struct is a u64.
-#[derive(Debug)]
 pub struct Game<const N: usize = 8>
 where
     LaneCount<N>: SupportedLaneCount,
 {
-    /// This field stores the cells in a contiguous array of nibbles,
-    /// where 0b0000 represents dead and 0b0001 alive.
+    pool: ThreadPool,
     field: Vec<u64>,
-
-    /// This field is used to perform pointer-swapping for performance.
     new_field: Vec<u64>,
-
-    /// This field represents the height of the `field` including padding.
     height: usize,
-
-    /// This field represents the width of the `field` in u64s including padding.
     columns: usize,
 }
 
@@ -61,9 +24,12 @@ where
     LaneCount<N>: SupportedLaneCount,
 {
     pub fn new(width: usize, height: usize) -> Self {
+        let threads = available_parallelism().unwrap().into();
+        let pool = ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
         let columns = div_ceil(div_ceil(width, 64), N) * N + 2;
         let height = height + 2;
         Game {
+            pool,
             field: vec![0; columns * height],
             new_field: vec![0; columns * height],
             height,
@@ -112,42 +78,53 @@ where
         return center;
     }
 
-    fn get_simd(&self, i: usize) -> Simd<u64, N> {
-        Simd::from_slice(&self.field[i..i + N])
+    fn get_simd(field: &[u64], i: usize) -> Simd<u64, N> {
+        Simd::from_slice(&field[i..i + N])
     }
 
     pub fn step(&mut self, steps: u32) {
         for _ in 0..steps {
-            for y in 1..self.height - 1 {
-                for x in (1..self.columns - 1).step_by(N) {
-                    let i = y * self.columns + x;
+            let threads = self.pool.current_num_threads();
+            let simulation_rows = self.height - 2;
+            let chunk_size = (simulation_rows + threads - 1) / threads;
 
-                    let center = self.get_simd(i);
+            self.pool.scope(|scope| {
+                for (i, target) in self.new_field[self.columns..self.columns * self.height - self.columns].chunks_mut(chunk_size * self.columns).enumerate() {
+                    let columns = &self.columns;
+                    let field = &self.field;
+                    scope.spawn(move |_| {
+                        for yl in 0..(target.len() / columns) {
+                            let y = yl + i * chunk_size + 1;
+                            for x in (1..columns - 1).step_by(N) {
+                                let i = y * columns + x;
 
-                    let mut nbs = [
-                        shr(self.get_simd(i - self.columns)), // top left
-                        self.get_simd(i - self.columns),      // top
-                        shl(self.get_simd(i - self.columns)), // top right
-                        shr(self.get_simd(i)),                // middle left
-                        shl(self.get_simd(i)),                // middle right
-                        shr(self.get_simd(i + self.columns)), // bottom left
-                        self.get_simd(i + self.columns),      // bottom
-                        shl(self.get_simd(i + self.columns)), // bottom right
-                    ];
+                                let center = Self::get_simd(field, i);
 
-                    // fix bits in neighbouring columns
-                    nbs[0][0] |= (self.field[i - self.columns - 1] & 1) << 63; // top left
-                    nbs[2][N - 1] |= (self.field[i - self.columns + N] & (1 << 63)) >> 63; // top right
-                    nbs[3][0] |= (self.field[i - 1] & 0x1) << 63; // left
-                    nbs[4][N - 1] |= (self.field[i + N] & (1 << 63)) >> 63; // right
-                    nbs[5][0] |= (self.field[i + self.columns - 1] & 1) << 63; // bottom left
-                    nbs[7][N - 1] |= (self.field[i + self.columns + N] & (1 << 63)) >> 63; // bottom right
+                                let mut nbs = [
+                                    shr(Self::get_simd(field, i - columns)), // top left
+                                    Self::get_simd(field, i - columns),      // top
+                                    shl(Self::get_simd(field, i - columns)), // top right
+                                    shr(Self::get_simd(field, i)),                // middle left
+                                    shl(Self::get_simd(field, i)),                // middle right
+                                    shr(Self::get_simd(field, i + columns)), // bottom left
+                                    Self::get_simd(field, i + columns),      // bottom
+                                    shl(Self::get_simd(field, i + columns)), // bottom right
+                                ];
 
-                    self.new_field[i..i + N]
-                        .copy_from_slice(Self::sub_step(center, &nbs).as_array());
+                                // fix bits in neighbouring columns
+                                nbs[0][0] |= (field[i - columns - 1] & 1) << 63; // top left
+                                nbs[2][N - 1] |= (field[i - columns + N] & (1 << 63)) >> 63; // top right
+                                nbs[3][0] |= (field[i - 1] & 0x1) << 63; // left
+                                nbs[4][N - 1] |= (field[i + N] & (1 << 63)) >> 63; // right
+                                nbs[5][0] |= (field[i + columns - 1] & 1) << 63; // bottom left
+                                nbs[7][N - 1] |= (field[i + columns + N] & (1 << 63)) >> 63; // bottom right
+
+                                target[yl * columns + x..yl * columns + N + x].copy_from_slice(Self::sub_step(center, &nbs).as_array());
+                            }
+                        }
+                    });
                 }
-            }
-
+            });
             swap(&mut self.field, &mut self.new_field);
         }
     }

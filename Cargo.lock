@@ -254,6 +254,7 @@ dependencies = [
  "itertools",
  "lazy_static",
  "opencl3",
+ "rayon",
  "toml",
 ]
 
