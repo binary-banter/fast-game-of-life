@@ -1,4 +1,5 @@
 #include "constants.h"
+
 #define SIMULATION_SIZE (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
 
 __device__ unsigned int substep(const unsigned int a0,
@@ -10,40 +11,37 @@ __device__ unsigned int substep(const unsigned int a0,
                                 const unsigned int a6,
                                 const unsigned int a7,
                                 unsigned int center) {
-    // stage 0
-    const unsigned int ta0 = a0 ^ a1;
-    const unsigned int a8 = ta0 ^ a2;
-    const unsigned int b0 = (a0 & a1) | (ta0 & a2);
-
-    const unsigned int ta3 = a3 ^ a4;
-    const unsigned int a9 = ta3 ^ a5;
-    const unsigned int b1 = (a3 & a4) | (ta3 & a5);
-
+    unsigned int a8;
+    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(a8) : "r"(a2), "r"(a1), "r"(a0));
+    unsigned int b0;
+    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b0) : "r"(a2), "r"(a1), "r"(a0));
+    unsigned int a9;
+    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(a9) : "r"(a5), "r"(a4), "r"(a3));
+    unsigned int b1;
+    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b1) : "r"(a5), "r"(a4), "r"(a3));
     const unsigned int aA = a6 ^ a7;
     const unsigned int b2 = a6 & a7;
-
-    // stage 1
-    const unsigned int ta8 = a8 ^ a9;
-    const unsigned int aB = ta8 ^ aA;
-    const unsigned int b3 = (a8 & a9) | (ta8 & aA);
-
-    const unsigned int tb0 = b0 ^ b1;
-    const unsigned int b4 = tb0 ^ b2;
-    const unsigned int c0 = (b0 & b1) | (tb0 & b2);
-
-    center |= aB;
-    center &= (b3 ^ b4);
-    center &= ~c0;
+    unsigned int aB;
+    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(aB) : "r"(aA), "r"(a9), "r"(a8));
+    unsigned int b3;
+    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b3) : "r"(aA), "r"(a9), "r"(a8));
+    unsigned int b4;
+    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(b4) : "r"(b2), "r"(b1), "r"(b0));
+    unsigned int c0;
+    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(c0) : "r"(b2), "r"(b1), "r"(b0));
+    asm("lop3.b32 %0, %1, %2, %3, 0b00001110;" : "=r"(center) : "r"(c0), "r"(aB), "r"(center));
+    asm("lop3.b32 %0, %1, %2, %3, 0b00101000;" : "=r"(center) : "r"(b4), "r"(b3), "r"(center));
 
     return center;
 }
 
-extern "C" __global__ void step(const unsigned int *field, unsigned int *new_field, const unsigned int height, const unsigned int steps) {
+extern "C" __global__ void
+step(const unsigned int *field, unsigned int *new_field, const unsigned int height, const unsigned int steps) {
     const size_t y = blockIdx.y * SIMULATION_SIZE + threadIdx.y;
     const size_t x = blockIdx.x + PADDING_X;
     const size_t ly = threadIdx.y;
-    const size_t py = ly*WORK_PER_THREAD;
-    const size_t i = x * height + y-ly+py;
+    const size_t py = ly * WORK_PER_THREAD;
+    const size_t i = x * height + y - ly + py;
 
     unsigned int left[WORK_PER_THREAD + 2];
     unsigned int right[WORK_PER_THREAD + 2];
@@ -108,14 +106,14 @@ extern "C" __global__ void step(const unsigned int *field, unsigned int *new_fie
             }
         }
 
-        for(size_t row = 0; row < WORK_PER_THREAD; row++) {
+        for (size_t row = 0; row < WORK_PER_THREAD; row++) {
             left[row + 1] = result_left[row];
             right[row + 1] = result_right[row];
         }
     }
 
-    for(size_t row = 0; row < WORK_PER_THREAD; row++) {
-        if(py + row >= PADDING_Y && py + row < WORK_GROUP_SIZE * WORK_PER_THREAD - PADDING_Y) {
+    for (size_t row = 0; row < WORK_PER_THREAD; row++) {
+        if (py + row >= PADDING_Y && py + row < WORK_GROUP_SIZE * WORK_PER_THREAD - PADDING_Y) {
             new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16);
         }
     }
