@@ -11,6 +11,7 @@ __device__ unsigned int substep(const unsigned int a0,
                                 const unsigned int a6,
                                 const unsigned int a7,
                                 unsigned int center) {
+    // stage 0
     unsigned int a8;
     asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(a8) : "r"(a2), "r"(a1), "r"(a0));
     unsigned int b0;
@@ -19,18 +20,22 @@ __device__ unsigned int substep(const unsigned int a0,
     asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(a9) : "r"(a5), "r"(a4), "r"(a3));
     unsigned int b1;
     asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b1) : "r"(a5), "r"(a4), "r"(a3));
-    const unsigned int aA = a6 ^ a7;
-    const unsigned int b2 = a6 & a7;
-    unsigned int aB;
-    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(aB) : "r"(aA), "r"(a9), "r"(a8));
-    unsigned int b3;
-    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b3) : "r"(aA), "r"(a9), "r"(a8));
-    unsigned int b4;
-    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(b4) : "r"(b2), "r"(b1), "r"(b0));
-    unsigned int c0;
-    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(c0) : "r"(b2), "r"(b1), "r"(b0));
-    asm("lop3.b32 %0, %1, %2, %3, 0b00001110;" : "=r"(center) : "r"(c0), "r"(aB), "r"(center));
-    asm("lop3.b32 %0, %1, %2, %3, 0b00101000;" : "=r"(center) : "r"(b4), "r"(b3), "r"(center));
+
+    // stage 1
+    unsigned int aA;
+    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(aA) : "r"(a8), "r"(a7), "r"(a6));
+    unsigned int b2;
+    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b2) : "r"(a8), "r"(a7), "r"(a6));
+
+    // magic phase
+    unsigned int at_least_one;
+    asm("lop3.b32 %0, %1, %2, %3, 0b11111110;" : "=r"(at_least_one) : "r"(b2), "r"(b1), "r"(b0));
+    unsigned int more_than_one;
+    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(more_than_one) : "r"(b2), "r"(b1), "r"(b0));
+    unsigned int two_or_three;
+    asm("lop3.b32 %0, %1, %2, %3, 0b01111000;" : "=r"(two_or_three) : "r"(at_least_one), "r"(aA), "r"(a9));
+    asm("lop3.b32 %0, %1, %2, %3, 0b11110110;" : "=r"(center) : "r"(center), "r"(aA), "r"(a9));
+    asm("lop3.b32 %0, %1, %2, %3, 0b01000000;" : "=r"(center) : "r"(center), "r"(two_or_three), "r"(more_than_one));
 
     return center;
 }
