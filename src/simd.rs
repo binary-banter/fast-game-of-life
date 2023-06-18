@@ -1,8 +1,8 @@
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::fmt::{Display, Formatter};
 use std::mem::swap;
 use std::simd::{LaneCount, Simd, SupportedLaneCount};
 use std::thread::available_parallelism;
-use rayon::{ThreadPool, ThreadPoolBuilder};
 
 pub struct Game<const N: usize = 8>
 where
@@ -25,7 +25,10 @@ where
 {
     pub fn new(width: usize, height: usize) -> Self {
         let threads = available_parallelism().unwrap().into();
-        let pool = ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
         let columns = div_ceil(div_ceil(width, 64), N) * N + 2;
         let height = height + 2;
         Game {
@@ -89,7 +92,11 @@ where
             let chunk_size = (simulation_rows + threads - 1) / threads;
 
             self.pool.scope(|scope| {
-                for (i, target) in self.new_field[self.columns..self.columns * self.height - self.columns].chunks_mut(chunk_size * self.columns).enumerate() {
+                for (i, target) in self.new_field
+                    [self.columns..self.columns * self.height - self.columns]
+                    .chunks_mut(chunk_size * self.columns)
+                    .enumerate()
+                {
                     let columns = &self.columns;
                     let field = &self.field;
                     scope.spawn(move |_| {
@@ -104,8 +111,8 @@ where
                                     shr(Self::get_simd(field, i - columns)), // top left
                                     Self::get_simd(field, i - columns),      // top
                                     shl(Self::get_simd(field, i - columns)), // top right
-                                    shr(Self::get_simd(field, i)),                // middle left
-                                    shl(Self::get_simd(field, i)),                // middle right
+                                    shr(Self::get_simd(field, i)),           // middle left
+                                    shl(Self::get_simd(field, i)),           // middle right
                                     shr(Self::get_simd(field, i + columns)), // bottom left
                                     Self::get_simd(field, i + columns),      // bottom
                                     shl(Self::get_simd(field, i + columns)), // bottom right
@@ -119,7 +126,8 @@ where
                                 nbs[5][0] |= (field[i + columns - 1] & 1) << 63; // bottom left
                                 nbs[7][N - 1] |= (field[i + columns + N] & (1 << 63)) >> 63; // bottom right
 
-                                target[yl * columns + x..yl * columns + N + x].copy_from_slice(Self::sub_step(center, &nbs).as_array());
+                                target[yl * columns + x..yl * columns + N + x]
+                                    .copy_from_slice(Self::sub_step(center, &nbs).as_array());
                             }
                         }
                     });

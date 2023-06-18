@@ -61,7 +61,7 @@ fn compile_cuda() {
             "--compiler-options",
             "-fpie",
             "-lib",
-            "-gencode=arch=compute_61,code=sm_61",
+            "-gencode=arch=compute_86,code=sm_86",
             "src/kernels/gol.cu",
             "-o",
         ])
