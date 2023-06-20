@@ -117,9 +117,11 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
         }
     }
 
+    if (ly == 0 || ly == 31) {
+        return;
+    }
+
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
-        if (py + row >= PADDING_Y && py + row < WORK_GROUP_SIZE * WORK_PER_THREAD - PADDING_Y) {
-            new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16);
-        }
+        new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16);
     }
 }
