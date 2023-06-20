@@ -49,8 +49,8 @@ fn div_ceil(x: usize, y: usize) -> usize {
 impl Game {
     pub fn step(&mut self, steps: u32) {
         let height = self.height as u32;
-        let step_size = 16;
-        for _ in 0..steps / 16 {
+        let step_size = 32;
+        for _ in 0..steps / step_size {
             let mut args = Args::default();
             args.add_arg(&mut self.field_buffer);
             args.add_arg(&mut self.new_field_buffer);
@@ -62,7 +62,7 @@ impl Game {
             mem::swap(&mut self.field_buffer, &mut self.new_field_buffer);
         }
 
-        let remaining_steps = steps % 16;
+        let remaining_steps = steps % step_size;
         if remaining_steps == 0 {
             self.stream.wait().unwrap();
             return;
@@ -90,7 +90,7 @@ impl Game {
         ) * *WORK_PER_THREAD
             + 2 * *PADDING_Y;
 
-        let global_work_size_x = columns - 2 * *PADDING_X;
+        let global_work_size_x = (columns - 2 * *PADDING_X) / 2;
         let global_work_size_y =
             (height - 2 * *PADDING_Y) / (*WORK_GROUP_SIZE * *WORK_PER_THREAD - 2 * *PADDING_Y);
         let local_work_size_y = *WORK_GROUP_SIZE;

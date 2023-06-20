@@ -50,6 +50,8 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
 
     unsigned int left[WORK_PER_THREAD + 2];
     unsigned int right[WORK_PER_THREAD + 2];
+    unsigned int leftleft[WORK_PER_THREAD + 2];
+    unsigned int rightright[WORK_PER_THREAD + 2];
 
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
         unsigned int col_l = field[i + row - height];
@@ -58,16 +60,24 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
 
         left[row + 1] = (col_l << 16) | (col_m >> 16);
         right[row + 1] = (col_m << 16) | (col_r >> 16);
+        leftleft[row + 1] = (col_l << 16) | (col_m >> 16);
+        rightright[row + 1] = (col_m << 16) | (col_r >> 16);
     }
 
     for (size_t step = 0; step < steps; step++) {
         unsigned int result_left[WORK_PER_THREAD];
         unsigned int result_right[WORK_PER_THREAD];
+        unsigned int result_leftleft[WORK_PER_THREAD];
+        unsigned int result_rightright[WORK_PER_THREAD];
 
         left[0] = __shfl_up_sync(-1, left[WORK_PER_THREAD], 1);
         right[0] = __shfl_up_sync(-1, right[WORK_PER_THREAD], 1);
         left[WORK_PER_THREAD + 1] = __shfl_down_sync(-1, left[1], 1);
         right[WORK_PER_THREAD + 1] = __shfl_down_sync(-1, right[1], 1);
+        leftleft[0] = __shfl_up_sync(-1, leftleft[WORK_PER_THREAD], 1);
+        rightright[0] = __shfl_up_sync(-1, rightright[WORK_PER_THREAD], 1);
+        leftleft[WORK_PER_THREAD + 1] = __shfl_down_sync(-1, leftleft[1], 1);
+        rightright[WORK_PER_THREAD + 1] = __shfl_down_sync(-1, rightright[1], 1);
 
         for (size_t row = 0; row < WORK_PER_THREAD; row++) {
             size_t ly2 = row + 1;
@@ -75,16 +85,16 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
             // left
             {
                 // top: left mid right
-                const unsigned int a0 = left[ly2 - 1] >> 1;
+                const unsigned int a0 = (left[ly2 - 1] >> 1) | (leftleft[ly2 - 1] << 31);
                 const unsigned int a1 = left[ly2 - 1];
                 const unsigned int a2 = (left[ly2 - 1] << 1) | (right[ly2 - 1] >> 31);
 
                 // middle: left right
-                const unsigned int a3 = left[ly2] >> 1;
+                const unsigned int a3 = (left[ly2] >> 1) | (leftleft[ly2] << 31);;
                 const unsigned int a4 = (left[ly2] << 1) | (right[ly2] >> 31);
 
                 // bottom: left mid right
-                const unsigned int a5 = left[ly2 + 1] >> 1;
+                const unsigned int a5 = (left[ly2 + 1] >> 1) | (leftleft[ly2 + 1] << 31);
                 const unsigned int a6 = left[ly2 + 1];
                 const unsigned int a7 = (left[ly2 + 1] << 1) | (right[ly2 + 1] >> 31);
 
@@ -96,30 +106,69 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
                 // top: left mid right
                 const unsigned int a0 = (right[ly2 - 1] >> 1) | (left[ly2 - 1] << 31);
                 const unsigned int a1 = right[ly2 - 1];
-                const unsigned int a2 = right[ly2 - 1] << 1;
+                const unsigned int a2 = (right[ly2 - 1] << 1) | (rightright[ly2 - 1] << 31);
 
                 // middle: left right
                 const unsigned int a3 = (right[ly2] >> 1) | (left[ly2] << 31);
-                const unsigned int a4 = right[ly2] << 1;
+                const unsigned int a4 = (right[ly2] << 1) | (rightright[ly2] << 31);
 
                 // bottom: left mid right
                 const unsigned int a5 = (right[ly2 + 1] >> 1) | (left[ly2 + 1] << 31);
                 const unsigned int a6 = right[ly2 + 1];
-                const unsigned int a7 = right[ly2 + 1] << 1;
+                const unsigned int a7 = (right[ly2 + 1] << 1) | (rightright[ly2 + 1] << 31);
 
                 result_right[row] = substep(a0, a1, a2, a3, a4, a5, a6, a7, right[ly2]);
+            }
+            // leftleft
+            {
+                // top: left mid right
+                const unsigned int a0 = leftleft[ly2 - 1] >> 1;
+                const unsigned int a1 = leftleft[ly2 - 1];
+                const unsigned int a2 = (leftleft[ly2 - 1] << 1) | (left[ly2 - 1] >> 31);
+
+                // middle: left right
+                const unsigned int a3 = leftleft[ly2] >> 1;
+                const unsigned int a4 = (leftleft[ly2] << 1) | (left[ly2] >> 31);
+
+                // bottom: left mid right
+                const unsigned int a5 = leftleft[ly2 + 1] >> 1;
+                const unsigned int a6 = leftleft[ly2 + 1];
+                const unsigned int a7 = (leftleft[ly2 + 1] << 1) | (left[ly2 + 1] >> 31);
+
+                result_leftleft[row] = substep(a0, a1, a2, a3, a4, a5, a6, a7, leftleft[ly2]);
+            }
+
+            //rightright
+            {
+                // top: left mid right
+                const unsigned int a0 = (rightright[ly2 - 1] >> 1) | (right[ly2 - 1] << 31);
+                const unsigned int a1 = rightright[ly2 - 1];
+                const unsigned int a2 = rightright[ly2 - 1] << 1;
+
+                // middle: left right
+                const unsigned int a3 = (rightright[ly2] >> 1) | (right[ly2] << 31);
+                const unsigned int a4 = rightright[ly2] << 1;
+
+                // bottom: left mid right
+                const unsigned int a5 = (rightright[ly2 + 1] >> 1) | (right[ly2 + 1] << 31);
+                const unsigned int a6 = rightright[ly2 + 1];
+                const unsigned int a7 = rightright[ly2 + 1] << 1;
+
+                result_rightright[row] = substep(a0, a1, a2, a3, a4, a5, a6, a7, rightright[ly2]);
             }
         }
 
         for (size_t row = 0; row < WORK_PER_THREAD; row++) {
             left[row + 1] = result_left[row];
             right[row + 1] = result_right[row];
+            leftleft[row + 1] = result_leftleft[row];
+            rightright[row + 1] = result_rightright[row];
         }
     }
 
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
         if (py + row >= PADDING_Y && py + row < WORK_GROUP_SIZE * WORK_PER_THREAD - PADDING_Y) {
-            new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16);
+            new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16) | leftleft[row + 1] | rightright[row + 1];
         }
     }
 }
