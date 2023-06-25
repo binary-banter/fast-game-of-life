@@ -27,15 +27,14 @@ __device__ unsigned int substep(const unsigned int a0,
     unsigned int b2;
     asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b2) : "r"(a8), "r"(a7), "r"(a6));
 
-    // magic phase
-    unsigned int at_least_one;
-    asm("lop3.b32 %0, %1, %2, %3, 0b11111110;" : "=r"(at_least_one) : "r"(b2), "r"(b1), "r"(b0));
-    unsigned int more_than_one;
-    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(more_than_one) : "r"(b2), "r"(b1), "r"(b0));
-    unsigned int two_or_three;
-    asm("lop3.b32 %0, %1, %2, %3, 0b01111000;" : "=r"(two_or_three) : "r"(at_least_one), "r"(aA), "r"(a9));
-    asm("lop3.b32 %0, %1, %2, %3, 0b11110110;" : "=r"(center) : "r"(center), "r"(aA), "r"(a9));
-    asm("lop3.b32 %0, %1, %2, %3, 0b01000000;" : "=r"(center) : "r"(center), "r"(two_or_three), "r"(more_than_one));
+    // magic stage dreamt up by an insane SAT-solver
+    unsigned int magic0;
+    asm("lop3.b32 %0, %1, %2, %3, 0b00111110;" : "=r"(magic0) : "r"(a9), "r"(aA), "r"(center));
+    unsigned int magic1;
+    asm("lop3.b32 %0, %1, %2, %3, 0b01011011;" : "=r"(magic1) : "r"(magic0), "r"(center), "r"(b2));
+    unsigned int magic2;
+    asm("lop3.b32 %0, %1, %2, %3, 0b10010001;" : "=r"(magic2) : "r"(magic1), "r"(b1), "r"(b0));
+    asm("lop3.b32 %0, %1, %2, %3, 0b01011000;" : "=r"(center) : "r"(magic2), "r"(magic0), "r"(magic1));
 
     return center;
 }
