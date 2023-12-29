@@ -1,5 +1,13 @@
 #include "constants.h"
 
+#define SIMULATED_ROWS (blockDim.y * WORK_PER_THREAD - 2 * STEP_SIZE)
+#define HEIGHT (gridDim.y * SIMULATED_ROWS + 2 * STEP_SIZE)
+
+#define CLIP_TOP_LY ((STEP_SIZE + WORK_PER_THREAD - 1) / WORK_PER_THREAD - 1)
+#define CLIP_TOP_OFFSET (STEP_SIZE - CLIP_TOP_LY * WORK_PER_THREAD)
+#define CLIP_BOTTOM_LY (blockDim.y - 1 - CLIP_TOP_LY)
+#define CLIP_BOTTOM_OFFSET (WORK_PER_THREAD + 1 - CLIP_TOP_OFFSET)
+
 __device__ unsigned int sub_step(const unsigned int a0,
                                 const unsigned int a1,
                                 const unsigned int a2,
@@ -40,17 +48,15 @@ __device__ unsigned int sub_step(const unsigned int a0,
 extern "C" __global__ void
 step(const unsigned int *field, unsigned int *new_field, const unsigned int steps) {
     const size_t py = threadIdx.y * WORK_PER_THREAD;
-    const size_t simulated_rows = blockDim.y * WORK_PER_THREAD - 2 * STEP_SIZE;
-    const size_t height = gridDim.y * simulated_rows + 2 * STEP_SIZE;
-    const size_t i = (blockIdx.x + 1) * height + blockIdx.y * simulated_rows + py;
+    const size_t i = (blockIdx.x + 1) * HEIGHT + blockIdx.y * SIMULATED_ROWS + py;
 
     unsigned int left[WORK_PER_THREAD + 2];
     unsigned int right[WORK_PER_THREAD + 2];
 
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
-        unsigned int col_l = field[i + row - height];
+        unsigned int col_l = field[i + row - HEIGHT];
         unsigned int col_m = field[i + row];
-        unsigned int col_r = field[i + row + height];
+        unsigned int col_r = field[i + row + HEIGHT];
 
         left[row + 1] = (col_l << 16) | (col_m >> 16);
         right[row + 1] = (col_m << 16) | (col_r >> 16);
@@ -60,9 +66,17 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
         unsigned int result_left[WORK_PER_THREAD];
         unsigned int result_right[WORK_PER_THREAD];
 
-        // todo: Clip top boundary.
+        // Clip top boundary.
+        if (blockIdx.y == 0 && threadIdx.y == CLIP_TOP_LY) {
+            left[CLIP_TOP_OFFSET] = 0;
+            right[CLIP_TOP_OFFSET] = 0;
+        }
 
-        // todo: Clip bottom boundary.
+        // Clip bottom boundary.
+        if (blockIdx.y == gridDim.y - 1 && threadIdx.y == CLIP_BOTTOM_LY) {
+            left[CLIP_BOTTOM_OFFSET] = 0;
+            right[CLIP_BOTTOM_OFFSET] = 0;
+        }
 
         // Clip left boundary.
         if (blockIdx.x == 0) {
