@@ -1,8 +1,6 @@
 #include "constants.h"
 
-#define SIMULATION_SIZE (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * STEP_SIZE)
-
-__device__ unsigned int substep(const unsigned int a0,
+__device__ unsigned int sub_step(const unsigned int a0,
                                 const unsigned int a1,
                                 const unsigned int a2,
                                 const unsigned int a3,
@@ -40,12 +38,11 @@ __device__ unsigned int substep(const unsigned int a0,
 }
 
 extern "C" __global__ void
-step(const unsigned int *field, unsigned int *new_field, const unsigned int height, const unsigned int columns, const unsigned int steps) {
-    const size_t y = blockIdx.y * SIMULATION_SIZE + threadIdx.y;
-    const size_t x = blockIdx.x + 1;
-    const size_t ly = threadIdx.y;
-    const size_t py = ly * WORK_PER_THREAD;
-    const size_t i = x * height + y - ly + py;
+step(const unsigned int *field, unsigned int *new_field, const unsigned int steps) {
+    const size_t py = threadIdx.y * WORK_PER_THREAD;
+    const size_t simulated_rows = blockDim.y * WORK_PER_THREAD - 2 * STEP_SIZE;
+    const size_t height = gridDim.y * simulated_rows + 2 * STEP_SIZE;
+    const size_t i = (blockIdx.x + 1) * height + blockIdx.y * simulated_rows + py;
 
     unsigned int left[WORK_PER_THREAD + 2];
     unsigned int right[WORK_PER_THREAD + 2];
@@ -63,15 +60,19 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
         unsigned int result_left[WORK_PER_THREAD];
         unsigned int result_right[WORK_PER_THREAD];
 
+        // todo: Clip top boundary.
+
+        // todo: Clip bottom boundary.
+
         // Clip left boundary.
-        if (x == 1) {
+        if (blockIdx.x == 0) {
             for (size_t row = 0; row < WORK_PER_THREAD; row++) {
                 left[row + 1] &= 0x0000FFFF;
             }
         }
 
         // Clip right boundary.
-        if (x == columns - 2) {
+        if (blockIdx.x == gridDim.x - 1) {
             for (size_t row = 0; row < WORK_PER_THREAD; row++) {
                 right[row + 1] &= 0xFFFF0000;
             }
@@ -101,7 +102,7 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
                 const unsigned int a6 = left[ly2 + 1];
                 const unsigned int a7 = (left[ly2 + 1] << 1) | (right[ly2 + 1] >> 31);
 
-                result_left[row] = substep(a0, a1, a2, a3, a4, a5, a6, a7, left[ly2]);
+                result_left[row] = sub_step(a0, a1, a2, a3, a4, a5, a6, a7, left[ly2]);
             }
 
             //right
@@ -120,7 +121,7 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
                 const unsigned int a6 = right[ly2 + 1];
                 const unsigned int a7 = right[ly2 + 1] << 1;
 
-                result_right[row] = substep(a0, a1, a2, a3, a4, a5, a6, a7, right[ly2]);
+                result_right[row] = sub_step(a0, a1, a2, a3, a4, a5, a6, a7, right[ly2]);
             }
         }
 
@@ -131,7 +132,7 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
     }
 
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
-        if (py + row >= STEP_SIZE && py + row < WORK_GROUP_SIZE * WORK_PER_THREAD - STEP_SIZE) {
+        if (py + row >= STEP_SIZE && py + row < blockDim.y * WORK_PER_THREAD - STEP_SIZE) {
             new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16);
         }
     }

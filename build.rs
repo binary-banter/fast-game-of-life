@@ -38,12 +38,10 @@ fn set_constants_cuda() {
     use toml::Table;
 
     let settings = include_str!("settings.toml").parse::<Table>().unwrap();
-    let work_group_size = settings["cuda"]["work-group-size"].as_integer().unwrap();
     let work_per_thread = settings["cuda"]["work-per-thread"].as_integer().unwrap();
     let step_size = settings["cuda"]["step-size"].as_integer().unwrap();
 
     let mut constants_file = File::create("./src/kernels/constants.h").unwrap();
-    writeln!(constants_file, "#define WORK_GROUP_SIZE {work_group_size}").unwrap();
     writeln!(constants_file, "#define WORK_PER_THREAD {work_per_thread}").unwrap();
     writeln!(constants_file, "#define STEP_SIZE {step_size}").unwrap();
 }
