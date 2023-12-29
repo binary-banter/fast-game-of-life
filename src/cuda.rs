@@ -49,6 +49,7 @@ extern "C" {
 impl Game {
     pub fn step(&mut self, steps: u32) {
         let height = self.padded_height as u32;
+        let columns = self.padded_columns as u32;
         let step_size = *STEP_SIZE as u32;
 
         let chunks = repeat(step_size)
@@ -60,6 +61,7 @@ impl Game {
             args.add_arg(&mut self.buffer);
             args.add_arg(&mut self.buffer_aux);
             args.add_arg(&height);
+            args.add_arg(&columns);
             args.add_arg(&steps);
             self.stream
                 .launch(&self.kernel, self.grid_dim, self.block_dim, &args, 0)

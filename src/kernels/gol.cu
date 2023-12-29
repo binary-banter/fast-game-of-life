@@ -40,7 +40,7 @@ __device__ unsigned int substep(const unsigned int a0,
 }
 
 extern "C" __global__ void
-step(const unsigned int *field, unsigned int *new_field, const unsigned int height, const unsigned int steps) {
+step(const unsigned int *field, unsigned int *new_field, const unsigned int height, const unsigned int columns, const unsigned int steps) {
     const size_t y = blockIdx.y * SIMULATION_SIZE + threadIdx.y;
     const size_t x = blockIdx.x + 1;
     const size_t ly = threadIdx.y;
@@ -62,6 +62,20 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
     for (size_t step = 0; step < steps; step++) {
         unsigned int result_left[WORK_PER_THREAD];
         unsigned int result_right[WORK_PER_THREAD];
+
+        // Clip left boundary.
+        if (x == 1) {
+            for (size_t row = 0; row < WORK_PER_THREAD; row++) {
+                left[row + 1] &= 0x0000FFFF;
+            }
+        }
+
+        // Clip right boundary.
+        if (x == columns - 2) {
+            for (size_t row = 0; row < WORK_PER_THREAD; row++) {
+                right[row + 1] &= 0xFFFF0000;
+            }
+        }
 
         left[0] = __shfl_up_sync(-1, left[WORK_PER_THREAD], 1);
         right[0] = __shfl_up_sync(-1, right[WORK_PER_THREAD], 1);
