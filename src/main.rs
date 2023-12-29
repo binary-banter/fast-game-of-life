@@ -9,4 +9,5 @@ pub fn main() {
     game.set(6, 6);
     game.step(1);
     println!("{}", game);
+    println!("{}", env!("OUT_DIR"));
 }

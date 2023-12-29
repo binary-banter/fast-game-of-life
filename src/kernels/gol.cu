@@ -1,6 +1,6 @@
 #include "constants.h"
 
-#define SIMULATION_SIZE (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * PADDING_Y)
+#define SIMULATION_SIZE (WORK_GROUP_SIZE * WORK_PER_THREAD - 2 * STEP_SIZE)
 
 __device__ unsigned int substep(const unsigned int a0,
                                 const unsigned int a1,
@@ -42,7 +42,7 @@ __device__ unsigned int substep(const unsigned int a0,
 extern "C" __global__ void
 step(const unsigned int *field, unsigned int *new_field, const unsigned int height, const unsigned int steps) {
     const size_t y = blockIdx.y * SIMULATION_SIZE + threadIdx.y;
-    const size_t x = blockIdx.x + PADDING_X;
+    const size_t x = blockIdx.x + 1;
     const size_t ly = threadIdx.y;
     const size_t py = ly * WORK_PER_THREAD;
     const size_t i = x * height + y - ly + py;
@@ -117,7 +117,7 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int heig
     }
 
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
-        if (py + row >= PADDING_Y && py + row < WORK_GROUP_SIZE * WORK_PER_THREAD - PADDING_Y) {
+        if (py + row >= STEP_SIZE && py + row < WORK_GROUP_SIZE * WORK_PER_THREAD - STEP_SIZE) {
             new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16);
         }
     }
