@@ -1,4 +1,35 @@
-use fast_game_of_life::game::Game;
+#[cfg(feature = "cuda")]
+use fast_game_of_life::cuda::Game;
+#[cfg(feature = "opencl")]
+use fast_game_of_life::opencl::Game;
+#[cfg(feature = "simd")]
+use fast_game_of_life::simd::Game;
+use fast_game_of_life::trivial;
+#[cfg(not(any(feature = "simd", feature = "cuda", feature = "opencl")))]
+use fast_game_of_life::trivial::Game;
+
+#[cfg(feature = "cuda")]
+#[test]
+fn cuda_equivalent_trivial() {
+    let grid = include_str!("grid");
+
+    let mut cuda_game = Game::new(64, 1440);
+    let mut trivial_game = trivial::Game::new(64, 1440);
+
+    for (y, row) in grid.lines().enumerate() {
+        for (x, cell) in row.chars().enumerate() {
+            if let '1' = cell {
+                cuda_game.set(x, y);
+                trivial_game.set(x, y);
+            }
+        }
+    }
+
+    cuda_game.step(50);
+    trivial_game.step(50);
+
+    assert_eq!(format!("{cuda_game}"), format!("{trivial_game}"));
+}
 
 #[test]
 fn off_0_neighbors() {

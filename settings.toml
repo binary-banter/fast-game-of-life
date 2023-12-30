@@ -1,25 +1,22 @@
 [opencl]
 # Vertical block dimension (horizontal block dimension is 1).
-work-group-size = 256   # 7900 XTX
+work-group-size = 256
 
 # Rows computed per thread.
-work-per-thread = 3     # 7900 XTX
+work-per-thread = 3
 
 # Horizontal padding columns (32 cells).
-padding-x = 1           # 7900 XTX
+padding-x = 1
 
 # Vertical padding in cells.
-padding-y = 16          # 7900 XTX
+padding-y = 16
 
 [cuda]
 # Vertical block dimension (horizontal block dimension is 1).
-work-group-size = 32   # 1080Ti
+work-group-size = 32
 
 # Rows computed per thread.
-work-per-thread = 16     # 1080Ti
+work-per-thread = 16
 
-# Horizontal padding columns (32 cells).
-padding-x = 1           # 1080Ti
-
-# Vertical padding in cells.
-padding-y = 16          # 1080Ti
+# Steps to simulate at once, must be between 1 and 16.
+step-size = 16
