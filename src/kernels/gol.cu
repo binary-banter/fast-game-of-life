@@ -45,6 +45,11 @@ __device__ unsigned int sub_step(const unsigned int a0,
     return center;
 }
 
+// destination = left >> 16 | right << 16
+inline __device__ void permute(unsigned int *destination, unsigned int left, unsigned int right) {
+    asm("prmt.b32 %0, %1, %2, 0x1076;" : "=r"(*destination) : "r"(left), "r"(right));
+}
+
 extern "C" __global__ void
 step(const unsigned int *field, unsigned int *new_field, const unsigned int steps) {
     const size_t py = threadIdx.y * WORK_PER_THREAD;
@@ -58,8 +63,8 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
         unsigned int col_m = field[i + row];
         unsigned int col_r = field[i + row + HEIGHT];
 
-        left[row + 1] = (col_l << 16) | (col_m >> 16);
-        right[row + 1] = (col_m << 16) | (col_r >> 16);
+        permute(&left[row + 1], col_l, col_m);
+        permute(&right[row + 1], col_m, col_r);
     }
 
     for (size_t step = 0; step < steps; step++) {
@@ -147,7 +152,7 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
 
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
         if (py + row >= STEP_SIZE && py + row < blockDim.y * WORK_PER_THREAD - STEP_SIZE) {
-            new_field[i + row] = (left[row + 1] << 16) | (right[row + 1] >> 16);
+            permute(&new_field[i + row], left[row + 1], right[row + 1]);
         }
     }
 }
