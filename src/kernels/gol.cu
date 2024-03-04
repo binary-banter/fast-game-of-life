@@ -42,7 +42,8 @@ inline __device__ uint4 load_uint4(uint4 *address) {
     unsigned int z;
     unsigned int w;
 
-    asm("ld.global.v4.u32 {%0, %1, %2, %3}, [%4];" : "=r"(x), "=r"(y), "=r"(z), "=r"(w) : "l"(address));
+ asm("ld.global.v4.u32 {%0, %1, %2, %3}, [%4];" : "=r"(x), "=r"(y), "=r"(z), "=r"(w) : "l"(address));
+//     asm("ld.shared.v4.u32 {%0, %1, %2, %3}, [%4];" : "=r"(x), "=r"(y), "=r"(z), "=r"(w) : "l"(__cvta_generic_to_shared(address)));
 
     return make_uint4(x,y,z,w);
 }
@@ -60,23 +61,26 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
     unsigned int left[WORK_PER_THREAD + 2];
     unsigned int right[WORK_PER_THREAD + 2];
 
+    __shared__ unsigned int col_l_arr[32 * WORK_PER_THREAD];
+    __shared__ unsigned int col_m_arr[32 * WORK_PER_THREAD];
+    __shared__ unsigned int col_r_arr[32 * WORK_PER_THREAD];
+
+    for (size_t row = 0; row < WORK_PER_THREAD; row++) {
+        col_l_arr[32 * row + threadIdx.y] = field[i - py + threadIdx.y + 32 * row - HEIGHT];
+        col_m_arr[32 * row + threadIdx.y] = field[i - py + threadIdx.y + 32 * row];
+        col_r_arr[32 * row + threadIdx.y] = field[i - py + threadIdx.y + 32 * row + HEIGHT];
+    }
+
+    __syncthreads();
+
     #pragma unroll
-    for (size_t row = 0; row < WORK_PER_THREAD / 4; row++) {
-        uint4 l = load_uint4((uint4 *) &field[i + row * 4 - HEIGHT]);
-        uint4 m = load_uint4((uint4 *) &field[i + row * 4]);
-        uint4 r = load_uint4((uint4 *) &field[i + row * 4 + HEIGHT]);
+    for (size_t row = 0; row < WORK_PER_THREAD; row++) {
+        unsigned int col_l = col_l_arr[threadIdx.y * WORK_PER_THREAD + row];
+        unsigned int col_m = col_m_arr[threadIdx.y * WORK_PER_THREAD + row];
+        unsigned int col_r = col_r_arr[threadIdx.y * WORK_PER_THREAD + row];
 
-        permute(&left[row * 4 + 1], l.x, m.x);
-        permute(&right[row * 4 + 1], m.x, r.x);
-
-        permute(&left[row * 4 + 2], l.y, m.y);
-        permute(&right[row * 4 + 2], m.y, r.y);
-
-        permute(&left[row * 4 + 3], l.z, m.z);
-        permute(&right[row * 4 + 3], m.z, r.z);
-
-        permute(&left[row * 4 + 4], l.w, m.w);
-        permute(&right[row * 4 + 4], m.w, r.w);
+        permute(&left[row + 1], col_l, col_m);
+        permute(&right[row + 1], col_m, col_r);
     }
 
     for (size_t step = 0; step < steps; step++) {
