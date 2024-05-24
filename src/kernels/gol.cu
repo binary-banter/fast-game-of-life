@@ -8,7 +8,7 @@
 #define CLIP_BOTTOM_LY (blockDim.y - 1 - CLIP_TOP_LY)
 #define CLIP_BOTTOM_OFFSET (WORK_PER_THREAD + 1 - CLIP_TOP_OFFSET)
 
-__device__ unsigned int sub_step(const unsigned int a0,
+inline __device__ unsigned int sub_step(const unsigned int a0,
                                 const unsigned int a1,
                                 const unsigned int a2,
                                 const unsigned int a3,
@@ -16,26 +16,35 @@ __device__ unsigned int sub_step(const unsigned int a0,
                                 const unsigned int a5,
                                 const unsigned int a6,
                                 const unsigned int a7,
+                                const unsigned int top_xor,
+                                const unsigned int bottom_xor,
+                                const unsigned int top_maj,
+                                const unsigned int bottom_maj,
                                 unsigned int center) {
     unsigned int a8, a9, aA, b0, b1, b2, magic0, magic1, magic2;
 
-    // stage 0
-    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(a8) : "r"(a2), "r"(a1), "r"(a0));
-    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b0) : "r"(a2), "r"(a1), "r"(a0));
-    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(a9) : "r"(a5), "r"(a4), "r"(a3));
-    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b1) : "r"(a5), "r"(a4), "r"(a3));
-
     // stage 1
-    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(aA) : "r"(a8), "r"(a7), "r"(a6));
-    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b2) : "r"(a8), "r"(a7), "r"(a6));
+    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(aA) : "r"(top_xor), "r"(a4), "r"(a3));
+    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b2) : "r"(top_xor), "r"(a4), "r"(a3));
 
     // magic stage dreamt up by an insane SAT-solver
-    asm("lop3.b32 %0, %1, %2, %3, 0b00111110;" : "=r"(magic0) : "r"(a9), "r"(aA), "r"(center));
+    asm("lop3.b32 %0, %1, %2, %3, 0b00111110;" : "=r"(magic0) : "r"(bottom_xor), "r"(aA), "r"(center));
     asm("lop3.b32 %0, %1, %2, %3, 0b01011011;" : "=r"(magic1) : "r"(magic0), "r"(center), "r"(b2));
-    asm("lop3.b32 %0, %1, %2, %3, 0b10010001;" : "=r"(magic2) : "r"(magic1), "r"(b1), "r"(b0));
+    asm("lop3.b32 %0, %1, %2, %3, 0b10010001;" : "=r"(magic2) : "r"(magic1), "r"(bottom_maj), "r"(top_maj));
     asm("lop3.b32 %0, %1, %2, %3, 0b01011000;" : "=r"(center) : "r"(magic2), "r"(magic0), "r"(magic1));
 
     return center;
+}
+
+inline __device__ uint4 load_uint4(uint4 *address) {
+    unsigned int x;
+    unsigned int y;
+    unsigned int z;
+    unsigned int w;
+
+    asm("ld.global.v4.u32 {%0, %1, %2, %3}, [%4];" : "=r"(x), "=r"(y), "=r"(z), "=r"(w) : "l"(address));
+
+    return make_uint4(x,y,z,w);
 }
 
 // destination = left >> 16 | right << 16
@@ -51,13 +60,23 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
     unsigned int left[WORK_PER_THREAD + 2];
     unsigned int right[WORK_PER_THREAD + 2];
 
-    for (size_t row = 0; row < WORK_PER_THREAD; row++) {
-        unsigned int col_l = field[i + row - HEIGHT];
-        unsigned int col_m = field[i + row];
-        unsigned int col_r = field[i + row + HEIGHT];
+    #pragma unroll
+    for (size_t row = 0; row < WORK_PER_THREAD / 4; row++) {
+        uint4 l = load_uint4((uint4 *) &field[i + row * 4 - HEIGHT]);
+        uint4 m = load_uint4((uint4 *) &field[i + row * 4]);
+        uint4 r = load_uint4((uint4 *) &field[i + row * 4 + HEIGHT]);
 
-        permute(&left[row + 1], col_l, col_m);
-        permute(&right[row + 1], col_m, col_r);
+        permute(&left[row * 4 + 1], l.x, m.x);
+        permute(&right[row * 4 + 1], m.x, r.x);
+
+        permute(&left[row * 4 + 2], l.y, m.y);
+        permute(&right[row * 4 + 2], m.y, r.y);
+
+        permute(&left[row * 4 + 3], l.z, m.z);
+        permute(&right[row * 4 + 3], m.z, r.z);
+
+        permute(&left[row * 4 + 4], l.w, m.w);
+        permute(&right[row * 4 + 4], m.w, r.w);
     }
 
     for (size_t step = 0; step < steps; step++) {
@@ -95,6 +114,16 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
         left[WORK_PER_THREAD + 1] = __shfl_down_sync(-1, left[1], 1);
         right[WORK_PER_THREAD + 1] = __shfl_down_sync(-1, right[1], 1);
 
+        unsigned int left_top_xor;
+        unsigned int left_mid_xor;
+        unsigned int left_top_maj;
+        unsigned int left_mid_maj;
+        unsigned int right_top_xor;
+        unsigned int right_mid_xor;
+        unsigned int right_top_maj;
+        unsigned int right_mid_maj;
+
+        #pragma unroll
         for (size_t row = 0; row < WORK_PER_THREAD; row++) {
             size_t ly2 = row + 1;
 
@@ -114,7 +143,24 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
                 const unsigned int a6 = left[ly2 + 1];
                 const unsigned int a7 = __funnelshift_l(right[ly2 + 1], left[ly2 + 1], 1);
 
-                result_left[row] = sub_step(a0, a1, a2, a3, a4, a5, a6, a7, left[ly2]);
+                if (row == 0) {
+                    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(left_top_xor) : "r"(a2), "r"(a1), "r"(a0));
+                    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(left_mid_xor) : "r"(a4), "r"(a3), "r"(left[ly2]));
+                    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(left_top_maj) : "r"(a2), "r"(a1), "r"(a0));
+                    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(left_mid_maj) : "r"(a4), "r"(a3), "r"(left[ly2]));
+                }
+
+                unsigned int left_bottom_xor;
+                unsigned int left_bottom_maj;
+                asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(left_bottom_xor) : "r"(a7), "r"(a6), "r"(a5));
+                asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(left_bottom_maj) : "r"(a7), "r"(a6), "r"(a5));
+
+
+                result_left[row] = sub_step(a0, a1, a2, a3, a4, a5, a6, a7, left_top_xor, left_bottom_xor, left_top_maj, left_bottom_maj, left[ly2]);
+                left_top_xor = left_mid_xor;
+                left_mid_xor = left_bottom_xor;
+                left_top_maj = left_mid_maj;
+                left_mid_maj = left_bottom_maj;
             }
 
             //right
@@ -133,16 +179,34 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
                 const unsigned int a6 = right[ly2 + 1];
                 const unsigned int a7 = right[ly2 + 1] << 1;
 
-                result_right[row] = sub_step(a0, a1, a2, a3, a4, a5, a6, a7, right[ly2]);
+                if (row == 0) {
+                    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(right_top_xor) : "r"(a2), "r"(a1), "r"(a0));
+                    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(right_mid_xor) : "r"(a4), "r"(a3), "r"(right[ly2]));
+                    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(right_top_maj) : "r"(a2), "r"(a1), "r"(a0));
+                    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(right_mid_maj) : "r"(a4), "r"(a3), "r"(right[ly2]));
+                }
+
+                unsigned int right_bottom_xor;
+                unsigned int right_bottom_maj;
+                asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(right_bottom_xor) : "r"(a7), "r"(a6), "r"(a5));
+                asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(right_bottom_maj) : "r"(a7), "r"(a6), "r"(a5));
+
+                result_right[row] = sub_step(a0, a1, a2, a3, a4, a5, a6, a7, right_top_xor, right_bottom_xor, right_top_maj, right_bottom_maj,  right[ly2]);
+                right_top_xor = right_mid_xor;
+                right_mid_xor = right_bottom_xor;
+                right_top_maj = right_mid_maj;
+                right_mid_maj = right_bottom_maj;
             }
         }
 
+        #pragma unroll
         for (size_t row = 0; row < WORK_PER_THREAD; row++) {
             left[row + 1] = result_left[row];
             right[row + 1] = result_right[row];
         }
     }
 
+    #pragma unroll
     for (size_t row = 0; row < WORK_PER_THREAD; row++) {
         if (py + row >= STEP_SIZE && py + row < blockDim.y * WORK_PER_THREAD - STEP_SIZE) {
             permute(&new_field[i + row], left[row + 1], right[row + 1]);
