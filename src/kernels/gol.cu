@@ -122,6 +122,7 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
         unsigned int right_mid_xor;
         unsigned int right_top_maj;
         unsigned int right_mid_maj;
+        unsigned int garbage;
 
         #pragma unroll
         for (size_t row = 0; row < WORK_PER_THREAD; row++) {
