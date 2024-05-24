@@ -24,14 +24,14 @@ inline __device__ unsigned int sub_step(const unsigned int a0,
     unsigned int a8, a9, aA, b0, b1, b2, magic0, magic1, magic2;
 
     // stage 1
-    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(aA) : "r"(top_xor), "r"(a4), "r"(a3));
-    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(b2) : "r"(top_xor), "r"(a4), "r"(a3));
+    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b10010110, 1;" : "=r"(aA) : "r"(top_xor), "r"(a4), "r"(a3));
+    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b11101000, 1;" : "=r"(b2) : "r"(top_xor), "r"(a4), "r"(a3));
 
     // magic stage dreamt up by an insane SAT-solver
-    asm("lop3.b32 %0, %1, %2, %3, 0b00111110;" : "=r"(magic0) : "r"(bottom_xor), "r"(aA), "r"(center));
-    asm("lop3.b32 %0, %1, %2, %3, 0b01011011;" : "=r"(magic1) : "r"(magic0), "r"(center), "r"(b2));
-    asm("lop3.b32 %0, %1, %2, %3, 0b10010001;" : "=r"(magic2) : "r"(magic1), "r"(bottom_maj), "r"(top_maj));
-    asm("lop3.b32 %0, %1, %2, %3, 0b01011000;" : "=r"(center) : "r"(magic2), "r"(magic0), "r"(magic1));
+    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b00111110, 1;" : "=r"(magic0) : "r"(bottom_xor), "r"(aA), "r"(center));
+    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b01011011, 1;" : "=r"(magic1) : "r"(magic0), "r"(center), "r"(b2));
+    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b10010001, 1;" : "=r"(magic2) : "r"(magic1), "r"(bottom_maj), "r"(top_maj));
+    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b01011000, 1;" : "=r"(center) : "r"(magic2), "r"(magic0), "r"(magic1));
 
     return center;
 }
@@ -144,16 +144,16 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
                 const unsigned int a7 = __funnelshift_l(right[ly2 + 1], left[ly2 + 1], 1);
 
                 if (row == 0) {
-                    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(left_top_xor) : "r"(a2), "r"(a1), "r"(a0));
-                    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(left_mid_xor) : "r"(a4), "r"(a3), "r"(left[ly2]));
-                    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(left_top_maj) : "r"(a2), "r"(a1), "r"(a0));
-                    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(left_mid_maj) : "r"(a4), "r"(a3), "r"(left[ly2]));
+                    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b10010110, 1;" : "=r"(left_top_xor) : "r"(a2), "r"(a1), "r"(a0));
+                    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b10010110, 1;" : "=r"(left_mid_xor) : "r"(a4), "r"(a3), "r"(left[ly2]));
+                    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b11101000, 1;" : "=r"(left_top_maj) : "r"(a2), "r"(a1), "r"(a0));
+                    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b11101000, 1;" : "=r"(left_mid_maj) : "r"(a4), "r"(a3), "r"(left[ly2]));
                 }
 
                 unsigned int left_bottom_xor;
                 unsigned int left_bottom_maj;
-                asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(left_bottom_xor) : "r"(a7), "r"(a6), "r"(a5));
-                asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(left_bottom_maj) : "r"(a7), "r"(a6), "r"(a5));
+                asm("lop3.and.b32 _|%0, %1, %2, %3, 0b10010110, 1;" : "=r"(left_bottom_xor) : "r"(a7), "r"(a6), "r"(a5));
+                asm("lop3.and.b32 _|%0, %1, %2, %3, 0b11101000, 1;" : "=r"(left_bottom_maj) : "r"(a7), "r"(a6), "r"(a5));
 
 
                 result_left[row] = sub_step(a0, a1, a2, a3, a4, a5, a6, a7, left_top_xor, left_bottom_xor, left_top_maj, left_bottom_maj, left[ly2]);
@@ -180,16 +180,16 @@ step(const unsigned int *field, unsigned int *new_field, const unsigned int step
                 const unsigned int a7 = right[ly2 + 1] << 1;
 
                 if (row == 0) {
-                    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(right_top_xor) : "r"(a2), "r"(a1), "r"(a0));
-                    asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(right_mid_xor) : "r"(a4), "r"(a3), "r"(right[ly2]));
-                    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(right_top_maj) : "r"(a2), "r"(a1), "r"(a0));
-                    asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(right_mid_maj) : "r"(a4), "r"(a3), "r"(right[ly2]));
+                    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b10010110, 1;" : "=r"(right_top_xor) : "r"(a2), "r"(a1), "r"(a0));
+                    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b10010110, 1;" : "=r"(right_mid_xor) : "r"(a4), "r"(a3), "r"(right[ly2]));
+                    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b11101000, 1;" : "=r"(right_top_maj) : "r"(a2), "r"(a1), "r"(a0));
+                    asm("lop3.and.b32 _|%0, %1, %2, %3, 0b11101000, 1;" : "=r"(right_mid_maj) : "r"(a4), "r"(a3), "r"(right[ly2]));
                 }
 
                 unsigned int right_bottom_xor;
                 unsigned int right_bottom_maj;
-                asm("lop3.b32 %0, %1, %2, %3, 0b10010110;" : "=r"(right_bottom_xor) : "r"(a7), "r"(a6), "r"(a5));
-                asm("lop3.b32 %0, %1, %2, %3, 0b11101000;" : "=r"(right_bottom_maj) : "r"(a7), "r"(a6), "r"(a5));
+                asm("lop3.and.b32 _|%0, %1, %2, %3, 0b10010110, 1;" : "=r"(right_bottom_xor) : "r"(a7), "r"(a6), "r"(a5));
+                asm("lop3.and.b32 _|%0, %1, %2, %3, 0b11101000, 1;" : "=r"(right_bottom_maj) : "r"(a7), "r"(a6), "r"(a5));
 
                 result_right[row] = sub_step(a0, a1, a2, a3, a4, a5, a6, a7, right_top_xor, right_bottom_xor, right_top_maj, right_bottom_maj,  right[ly2]);
                 right_top_xor = right_mid_xor;
