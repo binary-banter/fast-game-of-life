@@ -49,6 +49,26 @@ kernel void step(const global uint* field, global uint* new_field, const uint he
     local uint left[WORK_GROUP_SIZE * WORK_PER_THREAD];
     local uint right[WORK_GROUP_SIZE * WORK_PER_THREAD];
 
+    // Boundary masks: the halo halves of edge windows and the global padding
+    // rows lie outside the universe and must stay dead on every substep.
+    // Without this, intermediate generations inside a multi-step launch can
+    // give birth into the padding and leak back into the visible universe.
+    // Masks are step-invariant, so they are precomputed per row.
+    const size_t first_x = get_global_offset(1);
+    const size_t last_x = first_x + get_global_size(1) - 1;
+    const uint left_mask = (x == first_x) ? 0x0000FFFFu : 0xFFFFFFFFu;
+    const uint right_mask = (x == last_x) ? 0xFFFF0000u : 0xFFFFFFFFu;
+    const size_t core_rows = get_num_groups(0) * SIMULATION_SIZE;
+    uint row_left_mask[WORK_PER_THREAD];
+    uint row_right_mask[WORK_PER_THREAD];
+    for(uint row = 0; row < WORK_PER_THREAD; row++) {
+        const size_t buffer_row = get_group_id(0) * SIMULATION_SIZE + py + row;
+        const uint row_mask =
+            (buffer_row < PADDING_Y || buffer_row >= PADDING_Y + core_rows) ? 0u : 0xFFFFFFFFu;
+        row_left_mask[row] = row_mask & left_mask;
+        row_right_mask[row] = row_mask & right_mask;
+    }
+
     for(uint row = 0; row < WORK_PER_THREAD; row++){
         uint col_l = field[i+row - height];
         uint col_m = field[i+row];
@@ -104,6 +124,9 @@ kernel void step(const global uint* field, global uint* new_field, const uint he
 
                 result_right[row] = substep(a0,a1,a2,a3,a4,a5,a6,a7,right[ly2]);
             }
+
+            result_left[row] &= row_left_mask[row];
+            result_right[row] &= row_right_mask[row];
         }
 
         barrier(CLK_LOCAL_MEM_FENCE);
