@@ -338,3 +338,26 @@ fn blinker_boundary() {
     assert!(game.get(64, 64));
     assert!(game.get(64, 65));
 }
+
+#[cfg(feature = "opencl")]
+#[test]
+fn boundary_blinker_multi_step() {
+    let mut opencl_game = Game::new(64, 64);
+    let mut trivial_game = trivial::Game::new(64, 64);
+
+    // A vertical blinker touching the left edge dies within 2 generations:
+    // its horizontal phase is truncated by the boundary.
+    for y in [1, 2, 3] {
+        opencl_game.set(0, y);
+        trivial_game.set(0, y);
+    }
+
+    opencl_game.step(2);
+    trivial_game.step(2);
+
+    for y in 0..6 {
+        for x in 0..6 {
+            assert_eq!(opencl_game.get(x, y), trivial_game.get(x, y), "cell ({x},{y})");
+        }
+    }
+}
